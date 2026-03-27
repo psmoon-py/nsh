@@ -1,0 +1,85 @@
+"""
+Generate initial satellite constellation and debris field data.
+Uses realistic orbital parameters to create test data in ECI format.
+"""
+import json
+import os
+import numpy as np
+
+MU = 398600.4418
+RE = 6378.137
+
+
+def keplerian_to_eci(a, e, i, raan, argp, nu):
+    p = a * (1 - e**2)
+    r_mag = p / (1 + e * np.cos(nu))
+    r_pf = np.array([r_mag * np.cos(nu), r_mag * np.sin(nu), 0.0])
+    v_pf = np.sqrt(MU / p) * np.array([-np.sin(nu), e + np.cos(nu), 0.0])
+    cr, sr = np.cos(raan), np.sin(raan)
+    ca, sa = np.cos(argp), np.sin(argp)
+    ci, si = np.cos(i), np.sin(i)
+    R = np.array([
+        [cr*ca - sr*sa*ci, -cr*sa - sr*ca*ci, sr*si],
+        [sr*ca + cr*sa*ci, -sr*sa + cr*ca*ci, -cr*si],
+        [sa*si, ca*si, ci],
+    ])
+    return (R @ r_pf).tolist(), (R @ v_pf).tolist()
+
+
+def generate_constellation(n_sats=50):
+    satellites = []
+    n_planes = 5
+    sats_per_plane = n_sats // n_planes
+    a = RE + 550.0
+    e = 0.0001
+    inc = np.radians(53.0)
+    sat_id = 1
+    for plane in range(n_planes):
+        raan = np.radians(plane * 360.0 / n_planes)
+        for s in range(sats_per_plane):
+            nu = np.radians(s * 360.0 / sats_per_plane)
+            r, v = keplerian_to_eci(a, e, inc, raan, 0.0, nu)
+            satellites.append({
+                "id": f"SAT-Alpha-{sat_id:02d}", "type": "SATELLITE",
+                "r": {"x": round(r[0], 6), "y": round(r[1], 6), "z": round(r[2], 6)},
+                "v": {"x": round(v[0], 6), "y": round(v[1], 6), "z": round(v[2], 6)},
+                "fuel_kg": 50.0, "mass_kg": 550.0,
+                "nominal_slot": {"x": round(r[0], 6), "y": round(r[1], 6), "z": round(r[2], 6)},
+            })
+            sat_id += 1
+    return satellites
+
+
+def generate_debris(n_debris=10000):
+    debris = []
+    rng = np.random.default_rng(42)
+    for i in range(n_debris):
+        alt = rng.uniform(300, 1200)
+        a = RE + alt
+        e = rng.uniform(0.0001, 0.05)
+        inc = np.radians(rng.uniform(0, 100))
+        raan = np.radians(rng.uniform(0, 360))
+        argp = np.radians(rng.uniform(0, 360))
+        nu = np.radians(rng.uniform(0, 360))
+        r, v = keplerian_to_eci(a, e, inc, raan, argp, nu)
+        debris.append({
+            "id": f"DEB-{10000 + i}", "type": "DEBRIS",
+            "r": {"x": round(r[0], 6), "y": round(r[1], 6), "z": round(r[2], 6)},
+            "v": {"x": round(v[0], 6), "y": round(v[1], 6), "z": round(v[2], 6)},
+        })
+    return debris
+
+
+if __name__ == "__main__":
+    os.makedirs("backend/data", exist_ok=True)
+    print("Generating 50 satellites...")
+    sats = generate_constellation(50)
+    with open("backend/data/satellites_init.json", "w") as f:
+        json.dump(sats, f, indent=2)
+    print(f"  Saved {len(sats)} satellites")
+    print("Generating 10000 debris objects...")
+    debs = generate_debris(10000)
+    with open("backend/data/debris_init.json", "w") as f:
+        json.dump(debs, f, indent=2)
+    print(f"  Saved {len(debs)} debris objects")
+    print("Done!")
