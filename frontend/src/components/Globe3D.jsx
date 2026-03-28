@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useCallback } from 'react';
+import React, { useRef, useMemo, useCallback, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,7 +8,6 @@ const SCALE = 1 / 1000;     // Convert km to scene units
 
 /**
  * Convert lat/lon/alt to 3D Cartesian for the scene.
- * Uses spherical coordinates with Earth at origin.
  */
 function llaToVec3(lat, lon, alt) {
   const r = EARTH_RADIUS + alt * SCALE;
@@ -22,7 +21,6 @@ function llaToVec3(lat, lon, alt) {
 }
 
 function eciToVec3(r) {
-  // r = {x, y, z} in km — scale to scene units
   return new THREE.Vector3(r.x * SCALE, r.z * SCALE, -r.y * SCALE);
 }
 
@@ -31,30 +29,24 @@ function Earth() {
   const meshRef = useRef();
   const cloudsRef = useRef();
 
-  // Load textures from CDN
   const textures = useMemo(() => {
     const loader = new THREE.TextureLoader();
     return {
-      map: loader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
-      bump: loader.load('https://unpkg.com/three-globe/example/img/earth-topology.png'),
-      night: loader.load('https://unpkg.com/three-globe/example/img/earth-night.jpg'),
+      map: loader.load('/textures/earth_daymap.jpg'),
+      night: loader.load('/textures/earth_nightmap.jpg'),
     };
   }, []);
 
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.01;
-    if (cloudsRef.current) cloudsRef.current.rotation.y += delta * 0.012;
   });
 
   return (
     <group>
-      {/* Main Earth sphere */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[EARTH_RADIUS, 64, 64]} />
         <meshPhongMaterial
           map={textures.map}
-          bumpMap={textures.bump}
-          bumpScale={0.02}
           emissiveMap={textures.night}
           emissive={new THREE.Color(0x222222)}
           emissiveIntensity={1.5}
@@ -66,29 +58,17 @@ function Earth() {
       {/* Atmosphere glow */}
       <mesh>
         <sphereGeometry args={[EARTH_RADIUS * 1.015, 64, 64]} />
-        <meshBasicMaterial
-          color={0x4488ff}
-          transparent
-          opacity={0.06}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x4488ff} transparent opacity={0.06} side={THREE.BackSide} />
       </mesh>
-
-      {/* Outer glow ring */}
       <mesh>
         <sphereGeometry args={[EARTH_RADIUS * 1.04, 32, 32]} />
-        <meshBasicMaterial
-          color={0x00aaff}
-          transparent
-          opacity={0.025}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x00aaff} transparent opacity={0.025} side={THREE.BackSide} />
       </mesh>
     </group>
   );
 }
 
-/* ================ SATELLITES (individual meshes) ================ */
+/* ================ SATELLITES ================ */
 function Satellites({ satellites, selectedSat, onSelectSat }) {
   return (
     <group>
@@ -103,40 +83,27 @@ function Satellites({ satellites, selectedSat, onSelectSat }) {
 
         return (
           <group key={sat.id} position={pos}>
-            {/* Satellite dot */}
             <mesh onClick={() => onSelectSat(sat.id)}>
               <sphereGeometry args={[isSelected ? 0.04 : 0.025, 8, 8]} />
               <meshBasicMaterial color={color} />
             </mesh>
 
-            {/* Glow ring for selected */}
             {isSelected && (
               <mesh>
                 <ringGeometry args={[0.06, 0.1, 32]} />
-                <meshBasicMaterial
-                  color="#00e5ff"
-                  transparent
-                  opacity={0.4}
-                  side={THREE.DoubleSide}
-                />
+                <meshBasicMaterial color="#00e5ff" transparent opacity={0.4} side={THREE.DoubleSide} />
               </mesh>
             )}
 
-            {/* Label on hover for selected */}
             {isSelected && (
               <Html
                 distanceFactor={15}
                 style={{
-                  color: '#00e5ff',
-                  fontSize: 10,
+                  color: '#00e5ff', fontSize: 10,
                   fontFamily: "'IBM Plex Mono', monospace",
-                  background: 'rgba(6,8,13,0.85)',
-                  padding: '2px 6px',
-                  borderRadius: 3,
-                  border: '1px solid rgba(0,229,255,0.3)',
-                  whiteSpace: 'nowrap',
-                  pointerEvents: 'none',
-                  userSelect: 'none',
+                  background: 'rgba(6,8,13,0.85)', padding: '2px 6px',
+                  borderRadius: 3, border: '1px solid rgba(0,229,255,0.3)',
+                  whiteSpace: 'nowrap', pointerEvents: 'none', userSelect: 'none',
                 }}
               >
                 {sat.id} — {sat.fuel_kg?.toFixed(1)} kg
@@ -149,15 +116,14 @@ function Satellites({ satellites, selectedSat, onSelectSat }) {
   );
 }
 
-/* ================ DEBRIS CLOUD (Instanced Mesh for performance) ================ */
+/* ================ DEBRIS CLOUD (InstancedMesh) ================ */
 function DebrisCloud({ debrisCloud }) {
   const meshRef = useRef();
   const count = debrisCloud.length;
-
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
-  // Update instance matrices whenever data changes
-  useMemo(() => {
+  // FIX: useEffect instead of useMemo — refs aren't available during render phase
+  useEffect(() => {
     if (!meshRef.current || count === 0) return;
 
     for (let i = 0; i < count; i++) {
@@ -173,7 +139,9 @@ function DebrisCloud({ debrisCloud }) {
   if (count === 0) return null;
 
   return (
-    <instancedMesh ref={meshRef} args={[null, null, count]} frustumCulled={false}>
+    // FIX: key={count} forces remount when debris count changes
+    // (InstancedMesh can't resize its buffer dynamically)
+    <instancedMesh ref={meshRef} key={count} args={[null, null, Math.max(count, 1)]} frustumCulled={false}>
       <sphereGeometry args={[0.008, 4, 4]} />
       <meshBasicMaterial color="#ff3d4a" transparent opacity={0.35} />
     </instancedMesh>
@@ -190,19 +158,17 @@ const GROUND_STATIONS = [
   { id: 'GS-006', name: 'McMurdo', lat: -77.8463, lon: 166.6682, elev: 0.01 },
 ];
 
-function GroundStations() {
+function GroundStationMarkers() {
   return (
     <group>
       {GROUND_STATIONS.map((gs) => {
         const pos = llaToVec3(gs.lat, gs.lon, gs.elev);
         return (
           <group key={gs.id} position={pos}>
-            {/* Station marker: small amber diamond */}
             <mesh rotation={[0, 0, Math.PI / 4]}>
               <boxGeometry args={[0.03, 0.03, 0.005]} />
               <meshBasicMaterial color="#ffab00" />
             </mesh>
-            {/* Uplink cone (very subtle) */}
             <mesh position={[0, 0.08, 0]}>
               <coneGeometry args={[0.04, 0.12, 4]} />
               <meshBasicMaterial color="#ffab00" transparent opacity={0.08} wireframe />
@@ -224,7 +190,6 @@ function ThreatLines({ satellites, cdmWarnings }) {
         const sat = satellites.find((s) => s.id === cdm.sat_id);
         if (!sat || !sat.r) return null;
         const satPos = eciToVec3(sat.r);
-        // Approximate debris position from satellite direction (for visual only)
         const dir = satPos.clone().normalize();
         const debPos = dir.multiplyScalar(satPos.length() + 0.2);
         return { key: `${cdm.sat_id}-${cdm.deb_id}`, points: [satPos, debPos], risk: cdm.risk_level };
@@ -240,9 +205,7 @@ function ThreatLines({ satellites, cdmWarnings }) {
           <line key={l.key} geometry={geom}>
             <lineBasicMaterial
               color={l.risk === 'CRITICAL' ? '#ff3d4a' : '#ffab00'}
-              transparent
-              opacity={0.5}
-              linewidth={1}
+              transparent opacity={0.5} linewidth={1}
             />
           </line>
         );
@@ -251,7 +214,7 @@ function ThreatLines({ satellites, cdmWarnings }) {
   );
 }
 
-/* ================ ORBIT RING (reference) ================ */
+/* ================ ORBIT RING ================ */
 function OrbitRing({ altitude, color = '#1e2a3e', opacity = 0.15 }) {
   const r = EARTH_RADIUS + altitude * SCALE;
   return (
@@ -266,34 +229,21 @@ function OrbitRing({ altitude, color = '#1e2a3e', opacity = 0.15 }) {
 function SceneSetup() {
   return (
     <>
-      {/* Sunlight */}
       <directionalLight position={[50, 20, 30]} intensity={2.0} color="#fff5e0" />
       <ambientLight intensity={0.15} color="#4466aa" />
-
-      {/* Stars background */}
       <Stars radius={300} depth={100} count={6000} factor={3} saturation={0.1} fade speed={0.5} />
-
-      {/* Camera controls */}
       <OrbitControls
-        enablePan={false}
-        minDistance={8}
-        maxDistance={40}
-        enableDamping
-        dampingFactor={0.05}
-        rotateSpeed={0.5}
-        zoomSpeed={0.8}
+        enablePan={false} minDistance={8} maxDistance={40}
+        enableDamping dampingFactor={0.05} rotateSpeed={0.5} zoomSpeed={0.8}
       />
     </>
   );
 }
 
-/* ================ MAIN GLOBE3D COMPONENT ================ */
+/* ================ MAIN COMPONENT ================ */
 export default function Globe3D({
-  satellites = [],
-  debrisCloud = [],
-  cdmWarnings = [],
-  selectedSat,
-  onSelectSat,
+  satellites = [], debrisCloud = [], cdmWarnings = [],
+  selectedSat, onSelectSat,
 }) {
   return (
     <Canvas
@@ -304,19 +254,12 @@ export default function Globe3D({
     >
       <SceneSetup />
       <Earth />
-      <GroundStations />
-
-      {/* Reference orbit rings at common LEO altitudes */}
+      <GroundStationMarkers />
       <OrbitRing altitude={400} />
       <OrbitRing altitude={550} color="#00809a" opacity={0.08} />
       <OrbitRing altitude={800} />
-
       <DebrisCloud debrisCloud={debrisCloud} />
-      <Satellites
-        satellites={satellites}
-        selectedSat={selectedSat}
-        onSelectSat={onSelectSat}
-      />
+      <Satellites satellites={satellites} selectedSat={selectedSat} onSelectSat={onSelectSat} />
       <ThreatLines satellites={satellites} cdmWarnings={cdmWarnings} />
     </Canvas>
   );
