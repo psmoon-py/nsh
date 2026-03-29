@@ -78,7 +78,7 @@ def run():
         perp = [p / perp_mag for p in perp]
 
     # Debris 500km ahead in along-track direction
-    offset = 500.0
+    offset = 400.0
     deb_pos = [sat_pos[i] + perp[i] * offset for i in range(3)]
 
     # Debris velocity: counter-orbital (opposite direction to satellite motion)

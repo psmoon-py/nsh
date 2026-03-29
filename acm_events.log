@@ -214,3 +214,11 @@
 {"timestamp": "2026-03-28T15:17:57.946289+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-18T07:02:30+00:00", "collisions": 0, "maneuvers_executed": 1, "total_objects": 251}
 {"timestamp": "2026-03-28T15:18:00.024394+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-18T08:02:30+00:00", "collisions": 0, "maneuvers_executed": 1, "total_objects": 251}
 {"timestamp": "2026-03-28T15:36:34.620423+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-19T08:02:30+00:00", "collisions": 0, "maneuvers_executed": 1, "total_objects": 251}
+{"timestamp": "2026-03-29T13:30:31.608580+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 250, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-03-29T13:30:57.617058+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 250, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-03-29T17:12:19.717775+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-03-29T17:26:00.036580+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-03-29T17:27:32.647622+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-13T08:00:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 10094}
+{"timestamp": "2026-03-29T17:27:45.989424+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-14T08:00:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 10094}
+{"timestamp": "2026-03-29T17:27:59.464999+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-15T08:00:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 10094}
+{"timestamp": "2026-03-29T17:28:12.953126+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-16T08:00:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 10094}
