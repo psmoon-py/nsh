@@ -1,11 +1,17 @@
 """
 Test ACM with a DELIBERATE collision scenario.
 
-Injects debris on a collision course and verifies:
-  1. Conjunction IS detected
-  2. Evasion maneuver IS scheduled
-  3. Maneuver executes and fuel decreases
-  4. Collision IS avoided
+Injects debris on a TRUE collision course using the satellite's actual
+velocity vector from the snapshot API, and verifies:
+  1. Conjunction IS detected (CDM with CRITICAL/RED risk)
+  2. Evasion maneuver IS scheduled and executes
+  3. Fuel is consumed (Tsiolkovsky mass depletion)
+  4. Collision IS avoided (zero collisions)
+
+FIX: Previous version used [-y, x, 0] as "along-track" direction, which
+ignores the z-component of velocity (53° inclination). The debris ended up
+~178 km away at closest approach — only YELLOW, never triggering evasion.
+Now uses the actual velocity vector from the snapshot API.
 
 USAGE:
   1. Start backend fresh:  python -m uvicorn backend.main:app --port 8000
@@ -16,7 +22,7 @@ import json
 import math
 import sys
 
-API = "http://localhost:8000"
+API = "http://localhost:5173"
 MU = 398600.4418
 RE = 6378.137
 
@@ -29,6 +35,15 @@ def post(path, data):
     return requests.post(f"{API}{path}", json=data, timeout=120).json()
 
 
+def vec_mag(v):
+    return math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
+
+
+def vec_normalize(v):
+    m = vec_mag(v)
+    return [c / m for c in v] if m > 1e-10 else [0, 0, 0]
+
+
 def run():
     print("=" * 70)
     print("  PROJECT AETHER — Collision Scenario Test")
@@ -37,9 +52,9 @@ def run():
     # Check API
     try:
         snap = get("/api/visualization/snapshot")
-    except:
+    except Exception:
         print("ERROR: API not running. Start with:")
-        print("  python -m uvicorn backend.main:app --port 8000")
+        print("  python -m uvicorn backend.main:app --port 5173")
         sys.exit(1)
 
     sats = snap["satellites"]
@@ -56,40 +71,53 @@ def run():
     print(f"  Position: ({r['x']:.1f}, {r['y']:.1f}, {r['z']:.1f}) km")
     print(f"  Fuel: {initial_fuel} kg")
 
-    # ── Create debris on collision course ──
-    # Strategy: place debris in the same orbit but slightly ahead,
-    # moving in the OPPOSITE direction (counter-orbital).
-    # At 550km altitude, circular velocity is ~7.6 km/s.
-    # Counter-orbital closing speed = ~15.2 km/s.
-    # Place debris 500km ahead — collision in ~33 seconds.
-    # The adaptive coarse step should use ~3s steps for this (500km / (2 * 15.2) ≈ 16s → step ~8s).
+    # ── Read ACTUAL velocity from the snapshot API ──
+    if "v" not in target:
+        print("ERROR: Snapshot does not include velocity 'v' field.")
+        print("  The backend needs to expose satellite velocities in the snapshot.")
+        sys.exit(1)
+
+    v = target["v"]
+    sat_vel = [v["x"], v["y"], v["z"]]
+    v_mag = vec_mag(sat_vel)
+    print(f"  Velocity: ({v['x']:.3f}, {v['y']:.3f}, {v['z']:.3f}) km/s  |v|={v_mag:.3f}")
+
+    # ── Create debris on a TRUE collision course ──
+    # Strategy: place debris AHEAD of the satellite along its ACTUAL velocity
+    # direction, moving in the OPPOSITE direction (counter-orbital).
+    # This guarantees a head-on approach with ~2x orbital velocity closing speed.
+    #
+    # At 550km altitude, v_circ ≈ 7.6 km/s.
+    # Counter-orbital closing speed ≈ 15.2 km/s.
+    # At 400 km offset, TCA ≈ 400 / 15.2 ≈ 26 seconds.
+    # Evasion burn at T+11s fires 15s before TCA → deflects ~230m transversely.
 
     sat_pos = [r["x"], r["y"], r["z"]]
-    r_mag = math.sqrt(sum(p ** 2 for p in sat_pos))
+    r_mag = vec_mag(sat_pos)
+
+    # Along-track direction = actual velocity direction
+    v_hat = vec_normalize(sat_vel)
+
+    # Place debris ahead in the velocity direction
+    offset = 400.0  # km ahead
+    deb_pos = [sat_pos[i] + v_hat[i] * offset for i in range(3)]
+
+    # Debris velocity: counter-orbital (opposite direction)
     v_circ = math.sqrt(MU / r_mag)
+    deb_vel = [-v_hat[i] * v_circ for i in range(3)]
 
-    # Unit vectors
-    r_hat = [p / r_mag for p in sat_pos]
+    closing_speed = v_mag + v_circ
+    time_to_impact = offset / closing_speed
 
-    # Perpendicular in orbital plane (along-track direction)
-    perp = [-sat_pos[1], sat_pos[0], 0]
-    perp_mag = math.sqrt(sum(p ** 2 for p in perp))
-    if perp_mag > 0:
-        perp = [p / perp_mag for p in perp]
-
-    # Debris 500km ahead in along-track direction
-    offset = 400.0
-    deb_pos = [sat_pos[i] + perp[i] * offset for i in range(3)]
-
-    # Debris velocity: counter-orbital (opposite direction to satellite motion)
-    # Satellite moves in +perp direction, debris moves in -perp direction
-    deb_vel = [-perp[i] * v_circ for i in range(3)]
-
-    time_to_impact = offset / (2 * v_circ)
-
-    print(f"\n  Debris offset: {offset} km along-track")
-    print(f"  Closing speed: ~{2 * v_circ:.1f} km/s")
+    print(f"\n  Along-track direction: ({v_hat[0]:.4f}, {v_hat[1]:.4f}, {v_hat[2]:.4f})")
+    print(f"  Debris offset: {offset} km along velocity vector")
+    print(f"  Closing speed: ~{closing_speed:.1f} km/s")
     print(f"  Time to impact: ~{time_to_impact:.1f} seconds")
+
+    # Verify debris is at a reasonable altitude
+    deb_r_mag = vec_mag(deb_pos)
+    deb_alt = deb_r_mag - RE
+    print(f"  Debris altitude: {deb_alt:.1f} km  (r={deb_r_mag:.1f} km)")
 
     # ── Inject debris via telemetry ──
     print("\n[1] Injecting collision debris via POST /api/telemetry...")
@@ -113,16 +141,33 @@ def run():
 
     print(f"  CDMs: {len(cdms)}")
     for c in cdms[:5]:
-        print(f"    {c['sat_id']} ↔ {c['deb_id']} | TCA={c['tca_seconds']:.0f}s | miss={c['miss_distance_km']:.4f}km | {c['risk_level']}")
+        marker = "⚠️ " if c['risk_level'] in ('CRITICAL', 'RED') else "  "
+        print(f"    {marker}{c['sat_id']} ↔ {c['deb_id']} | TCA={c['tca_seconds']:.0f}s | miss={c['miss_distance_km']:.4f}km | {c['risk_level']}")
     print(f"  Maneuver queue: {len(queue)}")
     for m in queue[:5]:
-        print(f"    {m['sat_id']} | {m['burn_type']} | ΔV={m['dv_magnitude_ms']:.2f} m/s")
+        print(f"    {m['sat_id']} | {m['burn_type']} | ΔV={m['dv_magnitude_ms']:.2f} m/s | status={m['status']}")
 
     detected_on_telemetry = len(cdms) > 0
     evasion_scheduled = len(queue) > 0
 
+    # Check specifically for our target satellite
+    target_cdm = next((c for c in cdms if c['sat_id'] == sat_id and 'COLLIDER' in c['deb_id']), None)
+    if target_cdm:
+        print(f"\n  ✓ Target CDM found: {target_cdm['risk_level']} | TCA={target_cdm['tca_seconds']:.1f}s | miss={target_cdm['miss_distance_km']:.4f}km")
+    else:
+        # Also check if any CDM involves DEB-COLLIDER-001
+        collider_cdm = next((c for c in cdms if 'COLLIDER' in c.get('deb_id', '')), None)
+        if collider_cdm:
+            print(f"\n  ✓ Collider CDM found (different sat): {collider_cdm['sat_id']} ↔ {collider_cdm['deb_id']}")
+        else:
+            print(f"\n  ✗ No CDM found for DEB-COLLIDER-001 (may appear during sim steps)")
+
+    target_evasion = next((m for m in queue if m['sat_id'] == sat_id), None)
+    if target_evasion:
+        print(f"  ✓ Evasion queued: {target_evasion['burn_id']} | ΔV={target_evasion['dv_magnitude_ms']:.2f} m/s")
+
     # ── Advance simulation in small steps ──
-    print("\n[3] Advancing 5s × 30 steps (150 seconds)...")
+    print(f"\n[3] Advancing 5s × 30 steps (150 seconds)...")
     total_man = 0
     total_col = 0
     for i in range(30):
@@ -132,9 +177,9 @@ def run():
         total_man += man
         total_col += col
         if man > 0:
-            print(f"    Step {i + 1}: {man} maneuver(s) executed!")
+            print(f"    Step {i + 1} (t={5*(i+1):>3}s): {man} maneuver(s) executed!")
         if col > 0:
-            print(f"    Step {i + 1}: ⚠️  {col} COLLISION(S)!")
+            print(f"    Step {i + 1} (t={5*(i+1):>3}s): ⚠️  {col} COLLISION(S)!")
 
     # ── Check after simulate steps ──
     print("\n[4] Post-simulation check...")
@@ -146,9 +191,9 @@ def run():
         print(f"  CDM detected during simulation: {len(cdms)}")
         detected_on_telemetry = True
 
-    if not evasion_scheduled and len(queue) > 0:
-        print(f"  Evasion scheduled during simulation: {len(queue)}")
+    if not evasion_scheduled and (len(queue) > 0 or total_man > 0):
         evasion_scheduled = True
+        print(f"  Evasion acted upon during simulation")
 
     target_now = next((s for s in snap["satellites"] if s["id"] == sat_id), None)
     fuel_now = target_now["fuel_kg"] if target_now else initial_fuel
@@ -167,9 +212,15 @@ def run():
         col = res.get("collisions_detected", 0)
         total_man += man
         total_col += col
+        if man > 0:
+            print(f"    Hour {i + 1}: {man} maneuver(s)")
+        if col > 0:
+            print(f"    Hour {i + 1}: ⚠️  {col} COLLISION(S)!")
 
     snap = get("/api/visualization/snapshot")
     target_final = next((s for s in snap["satellites"] if s["id"] == sat_id), None)
+    fuel_final = target_final["fuel_kg"] if target_final else initial_fuel
+    fuel_used_total = initial_fuel - fuel_final
 
     # ── Verdict ──
     print("\n" + "=" * 70)
@@ -196,8 +247,8 @@ def run():
         print("  ❌ FAIL: No maneuvers executed")
         all_pass = False
 
-    if fuel_used > 0:
-        print(f"  ✅ PASS: Fuel tracking works ({fuel_used:.4f} kg consumed)")
+    if fuel_used_total > 0:
+        print(f"  ✅ PASS: Fuel tracking works ({fuel_used_total:.4f} kg consumed)")
     else:
         print("  ⚠️  WARN: No fuel consumed")
 

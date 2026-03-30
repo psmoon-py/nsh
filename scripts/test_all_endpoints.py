@@ -16,7 +16,7 @@ import requests
 import json
 import sys
 
-API = "http://localhost:8000"
+API = "http://localhost:5173"
 PASS = 0
 FAIL = 0
 

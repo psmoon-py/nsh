@@ -1,6 +1,13 @@
 """
 FastAPI application — Autonomous Constellation Manager API.
 Exposes all endpoints on port 8000 as required by the problem statement.
+
+Fixes applied:
+  - Satellite velocity included in snapshot (needed by test & frontend)
+  - Auto-evasion triggers for both CRITICAL and RED CDMs
+  - Duplicate evasion prevention: won't schedule if sat already has pending evasion
+  - Sub-step propagation for large simulation steps (catches mid-step collisions)
+  - Proper logging of burn execution events
 """
 import os
 import numpy as np
@@ -72,7 +79,10 @@ if os.path.exists(sat_file) and os.path.exists(deb_file):
 
 
 def _run_conjunction_and_evasion():
-    """Run conjunction assessment and auto-schedule evasions for CRITICAL CDMs.
+    """Run conjunction assessment and auto-schedule evasions for dangerous CDMs.
+
+    FIX: Triggers for both CRITICAL (miss < 100m) and RED (miss < 1km) CDMs.
+    FIX: Skips satellites that already have a pending evasion maneuver.
     Called after both telemetry ingestion AND simulation steps.
     """
     cdm_warnings = cd.run_full_assessment()
@@ -83,7 +93,17 @@ def _run_conjunction_and_evasion():
             cdm["sat_id"], cdm["deb_id"],
             cdm["tca_seconds"], cdm["miss_distance_km"], cdm["risk_level"],
         )
-        if cdm["risk_level"] == "CRITICAL":
+
+        # FIX: trigger evasion for CRITICAL and RED (not just CRITICAL)
+        if cdm["risk_level"] in ("CRITICAL", "RED"):
+            sat_id = cdm["sat_id"]
+
+            # FIX: skip if satellite already has a pending evasion
+            pending = scheduler.get_pending_for_satellite(sat_id)
+            has_evasion = any(c.burn_type == "EVASION" for c in pending)
+            if has_evasion:
+                continue
+
             evasion_cmd = scheduler.auto_schedule_evasion(cdm)
             if evasion_cmd:
                 logger.maneuver_scheduled(
@@ -170,17 +190,43 @@ async def simulate_step(data: SimulateStepInput):
     old_time = sm.timestamp
     new_time = old_time + timedelta(seconds=step)
 
-    # 1. Propagate all objects
-    if sm.positions.shape[0] > 0:
-        states = np.hstack([sm.positions, sm.velocities])
-        new_states = propagate_batch(states, float(step), RK4_TIMESTEP)
-        sm.positions = new_states[:, :3]
-        sm.velocities = new_states[:, 3:]
+    # ── Sub-step propagation for large steps ──
+    # Break steps > 30s into sub-steps to catch mid-step collisions
+    # and execute maneuvers at the correct time within the interval.
+    MAX_SUB_STEP = 30.0
+    total_collisions = 0
+    total_maneuvers = 0
 
-    # 2. Execute scheduled maneuvers
-    maneuvers_executed = scheduler.execute_due_maneuvers(old_time, new_time)
+    if step <= MAX_SUB_STEP:
+        sub_steps = [float(step)]
+    else:
+        n_subs = max(1, int(np.ceil(step / MAX_SUB_STEP)))
+        sub_dt = step / n_subs
+        sub_steps = [sub_dt] * n_subs
 
-    # 3. Propagate nominal slots
+    current_time = old_time
+
+    for sub_dt in sub_steps:
+        sub_new_time = current_time + timedelta(seconds=sub_dt)
+
+        # 1. Propagate all objects
+        if sm.positions.shape[0] > 0:
+            states = np.hstack([sm.positions, sm.velocities])
+            new_states = propagate_batch(states, sub_dt, RK4_TIMESTEP)
+            sm.positions = new_states[:, :3]
+            sm.velocities = new_states[:, 3:]
+
+        # 2. Execute scheduled maneuvers in this sub-window
+        maneuvers_executed = scheduler.execute_due_maneuvers(current_time, sub_new_time)
+        total_maneuvers += maneuvers_executed
+
+        # 3. Check for collisions at end of sub-step
+        sub_collisions = _check_collisions()
+        total_collisions += sub_collisions
+
+        current_time = sub_new_time
+
+    # 4. Propagate nominal slots for the full step
     if sm.nominal_slots:
         slot_ids = list(sm.nominal_slots.keys())
         slot_states = []
@@ -195,29 +241,25 @@ async def simulate_step(data: SimulateStepInput):
                 sm.nominal_slots[sid] = new_slot_states[i, :3]
                 sm.nominal_slot_vels[sid] = new_slot_states[i, 3:]
 
-    # 4. Update timestamp
+    # 5. Update timestamp
     sm.timestamp = new_time
 
-    # 5. Station-keeping
+    # 6. Station-keeping
     sk.update_all_statuses()
     sk.run_recovery_sweep()
 
-    # 6. RE-RUN conjunction assessment after propagation
-    #    This is critical — new conjunctions arise as objects move!
+    # 7. RE-RUN conjunction assessment after propagation
     _run_conjunction_and_evasion()
 
-    # 7. Collisions
-    collisions = _check_collisions()
-
     logger.sim_step_complete(
-        new_time.isoformat(), collisions, maneuvers_executed, len(sm.ids)
+        new_time.isoformat(), total_collisions, total_maneuvers, len(sm.ids)
     )
 
     return SimulateStepResponse(
         status="STEP_COMPLETE",
         new_timestamp=new_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-        collisions_detected=int(collisions),
-        maneuvers_executed=int(maneuvers_executed),
+        collisions_detected=int(total_collisions),
+        maneuvers_executed=int(total_maneuvers),
     )
 
 
@@ -235,6 +277,7 @@ async def get_snapshot():
             continue
         idx = sm._id_to_idx[sid]
         r = sm.positions[idx]
+        v = sm.velocities[idx]
         lat, lon, alt = eci_to_lla(r, ts_unix)
         satellites.append({
             "id": sid,
@@ -243,7 +286,9 @@ async def get_snapshot():
             "fuel_kg": round(float(sm.fuel.get(sid, 0)), 2),
             "status": sm.objects.get(sid, {}).get("status", "NOMINAL"),
             "drift_km": float(sm.objects.get(sid, {}).get("drift_km", 0)),
-            "r": {"x": round(float(r[0]), 3), "y": round(float(r[1]), 3), "z": round(float(r[2]), 3)},
+            # ECI position AND velocity — needed by test scripts and frontend
+            "r": {"x": round(float(r[0]), 6), "y": round(float(r[1]), 6), "z": round(float(r[2]), 6)},
+            "v": {"x": round(float(v[0]), 6), "y": round(float(v[1]), 6), "z": round(float(v[2]), 6)},
         })
 
     debris_cloud = []
@@ -282,6 +327,7 @@ async def get_snapshot():
 
 
 def _check_collisions():
+    """Check for actual collisions (miss distance < 100m) at current positions."""
     sat_indices = sm.get_satellite_indices()
     deb_indices = sm.get_debris_indices()
     if not sat_indices or not deb_indices:
