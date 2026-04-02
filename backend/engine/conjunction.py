@@ -17,9 +17,8 @@ Architecture:
   for accurate bullseye visualization, not a hash approximation.
 """
 import numpy as np
-from scipy.spatial import KDTree
 from backend.config import (
-    COLLISION_THRESHOLD, SCREENING_RADIUS,
+    COLLISION_THRESHOLD,
     WARNING_THRESHOLD_RED, WARNING_THRESHOLD_YELLOW,
     PREDICTION_HORIZON, RK4_TIMESTEP,
     LINEAR_GATE_MAX_MISS_KM, LINEAR_GATE_RELAXED_MISS_KM,
@@ -143,10 +142,21 @@ class ConjunctionDetector:
             t_lin = float(linear_tca_hint)
 
         # ── Phase 1: Coarse scan ─────────────────────────────────────────────
+        # IMPORTANT: very small linear TCA hints need much finer sampling.
+        # A fixed 10 s step can miss a real imminent encounter at t≈6 s.
         bracket_half = 300.0
         coarse_start = max(0.0, t_lin - bracket_half)
         coarse_end   = min(float(horizon_seconds), t_lin + bracket_half)
-        coarse_dt    = 10.0 if t_lin < 600.0 else 30.0
+        if t_lin < 5.0:
+            coarse_dt = 0.1
+        elif t_lin < 15.0:
+            coarse_dt = 0.25
+        elif t_lin < 60.0:
+            coarse_dt = 1.0
+        elif t_lin < 600.0:
+            coarse_dt = 10.0
+        else:
+            coarse_dt = 30.0
 
         # Propagate to coarse_start
         sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
@@ -178,7 +188,9 @@ class ConjunctionDetector:
                     dx, dy, dz, dvx, dvy, dvz, coarse_dt, RK4_TIMESTEP
                 )
 
-        # If coarse scan missed anything interesting, try full horizon at coarse_dt
+        # If coarse scan missed anything interesting, try full horizon at coarse_dt.
+        # Skip this fallback for near-imminent cases because the adaptive coarse_dt
+        # above is already fine enough and a wide scan would be wasted work.
         if min_dist >= WARNING_THRESHOLD_YELLOW and t_lin > bracket_half:
             # Fall back to a wider scan
             sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
@@ -260,10 +272,6 @@ class ConjunctionDetector:
             deb_r, deb_v = self.sm.get_state(deb_id)
 
             if tca_seconds > 0:
-                from backend.physics.propagator import propagate_single as _ps
-                sr, sx, sy, sz, svx, svy, svz = (
-                    None, *sat_r, *sat_v
-                )
                 sat_r_tca = propagate_single(
                     sat_r[0], sat_r[1], sat_r[2],
                     sat_v[0], sat_v[1], sat_v[2],

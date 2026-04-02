@@ -168,45 +168,65 @@ def _check_collisions() -> int:
 
 
 def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
-    """Refined mid-interval collision check using the watchlist.
+    """Refined mid-interval collision check using the active watchlist.
 
-    For every watchlisted pair, sample at fine steps inside [0, dt] to catch
-    collisions that occur mid-step between RK4 snapshots.
+    Uses a linear TCA estimate inside the current interval to decide whether a
+    pair deserves fine propagation. This is much safer than sampling only the
+    start of the interval and much cheaper than refining every pair blindly.
     """
     if not sm.conjunction_watchlist or dt_seconds <= 0:
         return 0
 
     collisions = 0
-    sample_dt  = min(0.5, dt_seconds / 4.0)
-    n_samples  = max(2, int(dt_seconds / sample_dt))
+    seen_pairs = set()
 
     for cdm in sm.conjunction_watchlist:
         sat_id = cdm["sat_id"]
         deb_id = cdm["deb_id"]
+        pair_key = tuple(sorted((sat_id, deb_id)))
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+
         if sat_id not in sm._id_to_idx or deb_id not in sm._id_to_idx:
             continue
 
         sat_r, sat_v = sm.get_state(sat_id)
         deb_r, deb_v = sm.get_state(deb_id)
 
+        r_rel = np.array(deb_r) - np.array(sat_r)
+        v_rel = np.array(deb_v) - np.array(sat_v)
+        v2 = float(np.dot(v_rel, v_rel)) + 1e-18
+        t_lin = float(np.clip(-np.dot(r_rel, v_rel) / v2, 0.0, dt_seconds))
+        miss_vec = r_rel + v_rel * t_lin
+        d_lin = float(np.linalg.norm(miss_vec))
+        d_now = float(np.linalg.norm(r_rel))
+
+        if min(d_now, d_lin) > INTERVAL_COLLISION_NEARBY_KM:
+            continue
+
+        fine_dt = 0.1 if min(d_now, d_lin) < 1.0 else 0.25 if min(d_now, d_lin) < 2.0 else 0.5
+        n_samples = max(1, int(np.ceil(dt_seconds / fine_dt)))
+
         sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
         dx, dy, dz, dvx, dvy, dvz = *deb_r, *deb_v
 
-        for _ in range(n_samples):
-            dist = np.sqrt((sx-dx)**2 + (sy-dy)**2 + (sz-dz)**2)
+        for step_idx in range(n_samples + 1):
+            dist = float(np.sqrt((sx-dx)**2 + (sy-dy)**2 + (sz-dz)**2))
             if dist < COLLISION_THRESHOLD:
                 collisions += 1
-                logger.collision_detected(sat_id, deb_id, float(dist))
+                logger.collision_detected(sat_id, deb_id, dist)
                 break
-            # Early exit if no longer close
-            if dist > INTERVAL_COLLISION_NEARBY_KM * 2:
-                break
-            sx, sy, sz, svx, svy, svz = propagate_single(
-                sx, sy, sz, svx, svy, svz, sample_dt, RK4_TIMESTEP
-            )
-            dx, dy, dz, dvx, dvy, dvz = propagate_single(
-                dx, dy, dz, dvx, dvy, dvz, sample_dt, RK4_TIMESTEP
-            )
+            if step_idx < n_samples:
+                dt_step = min(fine_dt, dt_seconds - step_idx * fine_dt)
+                if dt_step <= 0:
+                    continue
+                sx, sy, sz, svx, svy, svz = propagate_single(
+                    sx, sy, sz, svx, svy, svz, dt_step, RK4_TIMESTEP
+                )
+                dx, dy, dz, dvx, dvy, dvz = propagate_single(
+                    dx, dy, dz, dvx, dvy, dvz, dt_step, RK4_TIMESTEP
+                )
 
     return collisions
 
@@ -214,17 +234,28 @@ def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
 def _get_step_boundaries(old_time: datetime, new_time: datetime):
     """Get sorted list of time boundaries within [old_time, new_time].
 
-    Boundaries = old_time + every queued burn time in the interval + new_time.
-    Burns execute exactly at their boundary, not at end of sub-step.
+    Boundaries include:
+      - old_time
+      - every queued burn time in the interval
+      - periodic conjunction refresh checkpoints for long steps
+      - new_time
+
+    Burns execute exactly at their boundary, not at end of the enclosing step.
     """
     boundaries = [old_time]
     for cmd in scheduler.queue:
         if cmd.status == "PENDING" and old_time < cmd.burn_time <= new_time:
             boundaries.append(cmd.burn_time)
+
+    refresh = FULL_CA_REFRESH_SECONDS
+    if refresh > 0:
+        cursor = old_time + timedelta(seconds=refresh)
+        while cursor < new_time:
+            boundaries.append(cursor)
+            cursor += timedelta(seconds=refresh)
+
     boundaries.append(new_time)
-    # Sort and deduplicate
-    boundaries = sorted(set(boundaries))
-    return boundaries
+    return sorted(set(boundaries))
 
 
 def _predict_ground_track(sat_id: str, minutes: int):
@@ -361,8 +392,9 @@ async def simulate_step(data: SimulateStepInput):
     if sm.metrics_history:
         sm.metrics_history[-1]["fleet_uptime"] = float(sk.get_fleet_uptime())
 
-    # Re-run full conjunction assessment
-    _run_conjunction_and_evasion(force=True)
+    # Refresh conjunction assessment only when needed.
+    force_reassess = bool(total_maneuvers) or step >= FULL_CA_REFRESH_SECONDS
+    _run_conjunction_and_evasion(force=force_reassess)
 
     logger.sim_step_complete(new_time.isoformat(), total_collisions, total_maneuvers, len(sm.ids))
 

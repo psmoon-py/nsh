@@ -1,0 +1,60 @@
+REAL-DATA VALIDATION SUITE PATCH
+================================
+
+Files in this patch
+-------------------
+1. scripts/real_data_validation_lib.py
+2. scripts/test_with_real_data.py               (replacement)
+3. scripts/collision_case_builder.py            (bundled helper for seeded checks)
+4. tests/test_real_data_validation_suite.py     (new)
+5. tests/fixtures/public_sample_satellites.tle  (new)
+
+What this suite adds
+--------------------
+- fixture mode
+  Offline smoke mode using bundled public TLEs for satellites plus deterministic
+  debris perturbations for ingestion and seeded collision checks.
+
+- local-files mode
+  Real-data mode using two local 3LE files that you downloaded yourself.
+  This is the safest mode for repeatable judging-style validation.
+
+- live mode
+  Downloads public TLE groups from CelesTrak, converts them to state vectors
+  with SGP4, ingests them into the backend, and compares selected pairs against
+  an independent SGP4 oracle.
+
+- seeded collision campaign
+  Injects dynamically collisional debris cases built against the backend's own
+  propagator and verifies that the ACM schedules maneuvers and avoids impacts.
+
+Suggested usage
+---------------
+A. Fast offline smoke
+   python scripts/test_with_real_data.py --mode fixture --in-process
+
+B. Real local files from CelesTrak
+   python scripts/test_with_real_data.py \
+     --mode local-files \
+     --sat-file /path/to/starlink.tle \
+     --debris-file /path/to/debris.tle \
+     --api-base http://localhost:8000 \
+     --report-json real_data_report.json
+
+C. Live public download
+   python scripts/test_with_real_data.py \
+     --mode live \
+     --sat-limit 25 \
+     --debris-limit 500 \
+     --oracle-sats 5 \
+     --oracle-debris 120 \
+     --oracle-pairs-per-sat 8 \
+     --report-json real_data_report.json
+
+Important honesty note
+----------------------
+This suite makes validation much stronger, but it does not mathematically prove
+that the backend is perfect. It gives you three high-value checks:
+1. real public orbit ingestion
+2. independent SGP4-vs-backend spot validation on selected pairs
+3. dynamically collisional seeded regression checks

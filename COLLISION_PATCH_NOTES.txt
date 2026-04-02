@@ -1,0 +1,24 @@
+Files in this bundle:
+- collision_case_builder.py
+- test_collision_scenario.py
+- test_collision_scenario_regression.py
+
+What changed:
+1. The old scenario assumed a visually head-on geometry would remain collisional
+   under the backend's full J2 dynamics. That assumption was false.
+2. The new helper constructs debris by solving a boundary-value problem against
+   backend.physics.propagator.propagate_single.
+3. The regression test is now self-contained with FastAPI TestClient and trims
+   the world to one satellite so it runs much faster while still testing the
+   real backend logic.
+4. The live script now injects a dynamically collisional debris object instead
+   of a merely linearly suggestive one.
+
+Manual validation performed:
+- Reduced-world regression case:
+  * initial CDM: CRITICAL
+  * TCA: ~600.1 s
+  * initial miss without evasion: ~0.00333 km
+  * maneuvers executed: 1
+  * collisions detected: 0
+  * fuel used: ~0.19 kg

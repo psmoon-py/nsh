@@ -1,0 +1,27 @@
+Patched files in this bundle:
+- backend/engine/conjunction.py
+- backend/main.py
+- scripts/test_all_endpoints.py
+
+What changed:
+1. conjunction.py
+   - removed brittle fixed coarse step behavior for very small TCA hints
+   - adaptive coarse_dt: 0.1 / 0.25 / 1 / 10 / 30 s depending on imminence
+   - kept linearized screening and detailed propagation refinement
+   - cleaned unused imports and dead variables
+
+2. main.py
+   - interval collision check now uses interval-local linear TCA estimate before fine propagation
+   - step boundaries now include periodic FULL_CA_REFRESH_SECONDS checkpoints for long steps
+   - simulate_step no longer forces full CA after every step; it reassesses when a burn executed or when the step is long
+
+3. scripts/test_all_endpoints.py
+   - renamed helper function from test() to check() so pytest does not treat it as a broken test fixture
+
+Validation run in container:
+- pytest tests/test_conjunction_gate.py -q   -> 3 passed
+- pytest tests/test_exact_burn_timing.py tests/test_sequential_fuel.py tests/test_snapshot_contract.py tests/test_stationkeeping_score.py -q
+  -> 11 passed, 1 skipped
+
+Important note:
+This bundle improves correctness, but no one can honestly guarantee every conceivable edge case or a hackathon win.

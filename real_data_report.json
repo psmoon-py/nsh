@@ -1,0 +1,68 @@
+{
+  "summary": {
+    "mode": "local-files",
+    "epoch": "2026-03-28T12:00:00.000Z",
+    "satellites_loaded": 20,
+    "debris_loaded": 31,
+    "snapshot_satellites": 120,
+    "snapshot_debris": 10000,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "seeded_cases_run": 2,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 3,
+    "wall_clock_seconds": 146.1635000705719
+  },
+  "oracle": {
+    "telemetry_response": {
+      "status": "ACK",
+      "processed_count": 51,
+      "active_cdm_warnings": 0
+    },
+    "snapshot_satellites": 120,
+    "snapshot_debris": 10000,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_positive_pairs": [],
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "median_tca_error_s": null,
+    "median_miss_error_km": null,
+    "backend_pairs": []
+  },
+  "seeded": {
+    "cases": [
+      {
+        "sat_id": "SATELLITE-GEN-001",
+        "deb_id": "DEB-VAL-COLL-001",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 6.558459564010244e-12,
+        "initial_relative_speed_kms": 0.029861406781645485,
+        "initial_cdm_seen": true,
+        "maneuvers_executed": 0,
+        "collisions_detected": 3
+      },
+      {
+        "sat_id": "SATELLITE-GEN-002",
+        "deb_id": "DEB-VAL-COLL-002",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 4.9398206516344615e-12,
+        "initial_relative_speed_kms": 0.029866630607679797,
+        "initial_cdm_seen": false,
+        "maneuvers_executed": 0,
+        "collisions_detected": 0
+      }
+    ],
+    "seeded_cases_run": 2,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 3
+  }
+}

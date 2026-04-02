@@ -21,7 +21,7 @@ PASS = 0
 FAIL = 0
 
 
-def test(name, condition, detail=""):
+def check(name, condition, detail=""):
     global PASS, FAIL
     if condition:
         PASS += 1
@@ -52,23 +52,23 @@ def run():
     r = requests.get(f"{API}/api/visualization/snapshot")
     snap = r.json()
 
-    test("Status 200", r.status_code == 200, f"got {r.status_code}")
-    test("Has 'timestamp' key", "timestamp" in snap)
-    test("Has 'satellites' array", "satellites" in snap and isinstance(snap["satellites"], list))
-    test("Has 'debris_cloud' array", "debris_cloud" in snap and isinstance(snap["debris_cloud"], list))
+    check("Status 200", r.status_code == 200, f"got {r.status_code}")
+    check("Has 'timestamp' key", "timestamp" in snap)
+    check("Has 'satellites' array", "satellites" in snap and isinstance(snap["satellites"], list))
+    check("Has 'debris_cloud' array", "debris_cloud" in snap and isinstance(snap["debris_cloud"], list))
 
     if snap["satellites"]:
         s = snap["satellites"][0]
-        test("Satellite has 'id'", "id" in s)
-        test("Satellite has 'lat'", "lat" in s)
-        test("Satellite has 'lon'", "lon" in s)
-        test("Satellite has 'fuel_kg'", "fuel_kg" in s)
-        test("Satellite has 'status'", "status" in s)
-        test("fuel_kg is float", isinstance(s["fuel_kg"], (int, float)), f"type={type(s['fuel_kg'])}")
+        check("Satellite has 'id'", "id" in s)
+        check("Satellite has 'lat'", "lat" in s)
+        check("Satellite has 'lon'", "lon" in s)
+        check("Satellite has 'fuel_kg'", "fuel_kg" in s)
+        check("Satellite has 'status'", "status" in s)
+        check("fuel_kg is float", isinstance(s["fuel_kg"], (int, float)), f"type={type(s['fuel_kg'])}")
 
     if snap["debris_cloud"]:
         d = snap["debris_cloud"][0]
-        test("Debris is flattened array [id,lat,lon,alt]", isinstance(d, list) and len(d) == 4,
+        check("Debris is flattened array [id,lat,lon,alt]", isinstance(d, list) and len(d) == 4,
              f"got {type(d)} len={len(d) if isinstance(d, list) else 'N/A'}")
 
     # ════════════════════════════════════════
@@ -89,11 +89,11 @@ def run():
     r = requests.post(f"{API}/api/telemetry", json=payload)
     resp = r.json()
 
-    test("Status 200", r.status_code == 200, f"got {r.status_code}")
-    test("Has 'status': 'ACK'", resp.get("status") == "ACK", f"got {resp.get('status')}")
-    test("Has 'processed_count'", "processed_count" in resp)
-    test("Has 'active_cdm_warnings'", "active_cdm_warnings" in resp)
-    test("processed_count == 1", resp.get("processed_count") == 1)
+    check("Status 200", r.status_code == 200, f"got {r.status_code}")
+    check("Has 'status': 'ACK'", resp.get("status") == "ACK", f"got {resp.get('status')}")
+    check("Has 'processed_count'", "processed_count" in resp)
+    check("Has 'active_cdm_warnings'", "active_cdm_warnings" in resp)
+    check("processed_count == 1", resp.get("processed_count") == 1)
 
     # ════════════════════════════════════════
     # TEST 3: POST /api/simulate/step
@@ -102,22 +102,22 @@ def run():
     r = requests.post(f"{API}/api/simulate/step", json={"step_seconds": 60})
     resp = r.json()
 
-    test("Status 200", r.status_code == 200, f"got {r.status_code}")
-    test("Has 'status': 'STEP_COMPLETE'", resp.get("status") == "STEP_COMPLETE",
+    check("Status 200", r.status_code == 200, f"got {r.status_code}")
+    check("Has 'status': 'STEP_COMPLETE'", resp.get("status") == "STEP_COMPLETE",
          f"got {resp.get('status')}")
-    test("Has 'new_timestamp'", "new_timestamp" in resp)
-    test("Has 'collisions_detected'", "collisions_detected" in resp)
-    test("Has 'maneuvers_executed'", "maneuvers_executed" in resp)
-    test("collisions_detected is int", isinstance(resp.get("collisions_detected"), int),
+    check("Has 'new_timestamp'", "new_timestamp" in resp)
+    check("Has 'collisions_detected'", "collisions_detected" in resp)
+    check("Has 'maneuvers_executed'", "maneuvers_executed" in resp)
+    check("collisions_detected is int", isinstance(resp.get("collisions_detected"), int),
          f"type={type(resp.get('collisions_detected'))}")
 
     # Test edge: zero step
     r2 = requests.post(f"{API}/api/simulate/step", json={"step_seconds": 0})
-    test("Zero step doesn't crash", r2.status_code == 200)
+    check("Zero step doesn't crash", r2.status_code == 200)
 
     # Test edge: large step (24 hours)
     r3 = requests.post(f"{API}/api/simulate/step", json={"step_seconds": 86400})
-    test("24h step completes", r3.status_code == 200, f"got {r3.status_code}")
+    check("24h step completes", r3.status_code == 200, f"got {r3.status_code}")
 
     # ════════════════════════════════════════
     # TEST 4: POST /api/maneuver/schedule
@@ -144,14 +144,14 @@ def run():
         r = requests.post(f"{API}/api/maneuver/schedule", json=maneuver_payload)
         resp = r.json()
 
-        test("Maneuver endpoint responds", r.status_code in [200, 202], f"got {r.status_code}")
-        test("Has 'status' key", "status" in resp)
-        test("Has 'validation' key", "validation" in resp)
+        check("Maneuver endpoint responds", r.status_code in [200, 202], f"got {r.status_code}")
+        check("Has 'status' key", "status" in resp)
+        check("Has 'validation' key", "validation" in resp)
         # This might be REJECTED due to signal delay, which is correct behavior
         if resp.get("status") == "REJECTED":
-            test("Rejection is due to constraint (expected)", True)
+            check("Rejection is due to constraint (expected)", True)
         else:
-            test("Maneuver was SCHEDULED", resp.get("status") == "SCHEDULED")
+            check("Maneuver was SCHEDULED", resp.get("status") == "SCHEDULED")
 
     # Test with invalid satellite
     r_bad = requests.post(f"{API}/api/maneuver/schedule", json={
@@ -162,7 +162,7 @@ def run():
         ]
     })
     resp_bad = r_bad.json()
-    test("Invalid satellite → REJECTED", resp_bad.get("status") == "REJECTED",
+    check("Invalid satellite → REJECTED", resp_bad.get("status") == "REJECTED",
          f"got {resp_bad.get('status')}")
 
     # ════════════════════════════════════════
@@ -175,16 +175,16 @@ def run():
         requests.post(f"{API}/api/simulate/step", json={"step_seconds": 3600})
 
     r_snap = requests.get(f"{API}/api/visualization/snapshot")
-    test("Snapshot still works after propagation", r_snap.status_code == 200)
+    check("Snapshot still works after propagation", r_snap.status_code == 200)
 
     try:
         snap_data = r_snap.json()
-        test("JSON parses without error", True)
+        check("JSON parses without error", True)
         # Check no numpy types leaked through
         json_str = json.dumps(snap_data)
-        test("Full JSON serialization succeeds", True)
+        check("Full JSON serialization succeeds", True)
     except Exception as e:
-        test("JSON serialization", False, str(e))
+        check("JSON serialization", False, str(e))
 
     # ════════════════════════════════════════
     # SUMMARY
@@ -196,7 +196,7 @@ def run():
     if FAIL == 0:
         print("  ✅ ALL TESTS PASSED — API matches PS specification")
     else:
-        print(f"  ⚠️  {FAIL} test(s) failed — review above")
+        print(f"  ⚠️  {FAIL} check(s) failed — review above")
 
     return FAIL == 0
 
