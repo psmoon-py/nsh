@@ -215,7 +215,7 @@ Where: Isp = 300s, g₀ = 9.80665 m/s², initial fuel = 50 kg, dry mass = 500 kg
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for more details.
 
 ---
 
