@@ -8,35 +8,36 @@ import ManeuverGantt from './components/ManeuverGantt';
 import FuelHeatmap from './components/FuelHeatmap';
 import SatellitePanel from './components/SatellitePanel';
 import CDMList from './components/CDMList';
+import './styles/dashboard.css';
 
 export default function App() {
   const { data, loading, error, refresh } = useSnapshot();
   const [selectedSat, setSelectedSat] = useState(null);
-  const [simSpeed, setSimSpeed] = useState(60);
-  const [viewMode, setViewMode] = useState('3d'); // '3d' or '2d'
+  const [simSpeed, setSimSpeed]     = useState(60);
+  const [viewMode, setViewMode]     = useState('3d');
 
   const handleAdvance = useCallback(async () => {
     await postSimulateStep(simSpeed);
     refresh();
   }, [simSpeed, refresh]);
 
-  const satellites = data?.satellites || [];
-  const debrisCloud = data?.debris_cloud || [];
-  const cdmWarnings = data?.cdm_warnings || [];
+  const satellites    = data?.satellites    || [];
+  const debrisCloud   = data?.debris_cloud  || [];
+  const cdmWarnings   = data?.cdm_warnings  || [];
   const maneuverQueue = data?.maneuver_queue || [];
-  const timestamp = data?.timestamp || '—';
+  const timestamp     = data?.timestamp     || '—';
 
   const selectedSatData = selectedSat
     ? satellites.find((s) => s.id === selectedSat)
     : null;
 
-  const nominalCount = satellites.filter((s) => s.status === 'NOMINAL').length;
-  const criticalCdms = cdmWarnings.filter((c) => c.risk_level === 'CRITICAL').length;
-  const totalFuel = satellites.reduce((sum, s) => sum + (s.fuel_kg || 0), 0);
+  const nominalCount  = satellites.filter((s) => s.status === 'NOMINAL').length;
+  const criticalCdms  = cdmWarnings.filter((c) => c.risk_level === 'CRITICAL').length;
+  const totalFuel     = satellites.reduce((sum, s) => sum + (s.fuel_kg || 0), 0);
 
   return (
     <div className="dashboard">
-      {/* ---- Top Header ---- */}
+      {/* ─── Top Header ─── */}
       <StatusBar
         timestamp={timestamp}
         satCount={satellites.length}
@@ -52,23 +53,17 @@ export default function App() {
         error={error}
       />
 
-      {/* ---- Main Area ---- */}
+      {/* ─── Main Area ─── */}
       <div className="main-area">
         <div className="globe-container">
           {/* View mode toggle */}
-          <div className="view-toggle" style={{
-            position: 'absolute', top: 10, right: 10, zIndex: 20,
-            display: 'flex', gap: 2, background: 'rgba(10,14,23,0.9)',
-            borderRadius: 4, border: '1px solid var(--border)', padding: 2,
-          }}>
+          <div className="view-toggle">
             <button
               onClick={() => setViewMode('3d')}
               style={{
-                padding: '4px 10px', border: 'none', borderRadius: 3, cursor: 'pointer',
-                fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: 1,
                 background: viewMode === '3d' ? 'var(--cyan)' : 'transparent',
                 color: viewMode === '3d' ? '#000' : 'var(--text-dim)',
-                fontWeight: viewMode === '3d' ? 600 : 400,
+                fontWeight: viewMode === '3d' ? 700 : 400,
               }}
             >
               3D GLOBE
@@ -76,18 +71,15 @@ export default function App() {
             <button
               onClick={() => setViewMode('2d')}
               style={{
-                padding: '4px 10px', border: 'none', borderRadius: 3, cursor: 'pointer',
-                fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: 1,
                 background: viewMode === '2d' ? 'var(--cyan)' : 'transparent',
                 color: viewMode === '2d' ? '#000' : 'var(--text-dim)',
-                fontWeight: viewMode === '2d' ? 600 : 400,
+                fontWeight: viewMode === '2d' ? 700 : 400,
               }}
             >
               2D MAP
             </button>
           </div>
 
-          {/* Render selected view */}
           {viewMode === '3d' ? (
             <Globe3D
               satellites={satellites}
@@ -95,6 +87,7 @@ export default function App() {
               cdmWarnings={cdmWarnings}
               selectedSat={selectedSat}
               onSelectSat={setSelectedSat}
+              timestamp={timestamp}
             />
           ) : (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -123,7 +116,7 @@ export default function App() {
             <div className="panel__header">
               <span className="panel__title">Conjunction Bullseye</span>
               <span className="panel__tag">
-                {selectedSat || 'Select a satellite'}
+                {selectedSat || 'Select satellite'}
               </span>
             </div>
             <BullseyePlot cdmWarnings={cdmWarnings} selectedSat={selectedSat} />
@@ -133,12 +126,16 @@ export default function App() {
               <span className="panel__title">Maneuver Timeline</span>
               <span className="panel__tag">{maneuverQueue.length} queued</span>
             </div>
-            <ManeuverGantt maneuvers={maneuverQueue} satellites={satellites} timestamp={timestamp} />
+            <ManeuverGantt
+              maneuvers={maneuverQueue}
+              satellites={satellites}
+              timestamp={timestamp}
+            />
           </div>
         </div>
       </div>
 
-      {/* ---- Sidebar ---- */}
+      {/* ─── Sidebar ─── */}
       <div className="sidebar">
         <div className="panel">
           <div className="panel__header">
@@ -170,7 +167,9 @@ export default function App() {
           <div className="panel__header">
             <span className="panel__title">Satellite Detail</span>
             {selectedSatData && (
-              <span className={`panel__tag panel__tag--${selectedSatData.status === 'NOMINAL' ? 'nominal' : 'warning'}`}>
+              <span className={`panel__tag panel__tag--${
+                selectedSatData.status === 'NOMINAL' ? 'nominal' : 'warning'
+              }`}>
                 {selectedSatData.status}
               </span>
             )}

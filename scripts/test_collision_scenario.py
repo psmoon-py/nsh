@@ -22,7 +22,7 @@ import json
 import math
 import sys
 
-API = "http://localhost:5173"
+API = "http://localhost:8000"
 MU = 398600.4418
 RE = 6378.137
 
