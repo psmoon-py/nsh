@@ -9,8 +9,11 @@ Handles BOTH data formats:
 """
 import numpy as np
 import json
-from datetime import datetime, timezone
-from backend.config import DRY_MASS, INITIAL_FUEL, INITIAL_WET_MASS, SLOT_TOLERANCE
+from datetime import datetime, timezone, timedelta
+from backend.config import (
+    DRY_MASS, INITIAL_FUEL, INITIAL_WET_MASS, SLOT_TOLERANCE,
+    TRACK_HISTORY_MINUTES, TRACK_SAMPLE_SECONDS, METRICS_SAMPLE_SECONDS,
+)
 
 
 def _extract_vec3(obj, key):
@@ -43,6 +46,18 @@ class StateManager:
         self.last_burn_time = {}
         self.active_cdms = []
         self.maneuver_log = []
+        self.total_collisions_avoided = 0
+
+        # Extended state for richer frontend / scoring
+        self.last_telemetry_time = None
+        self.track_history = {}       # sat_id -> list[dict]
+        self.metrics_history = []     # list[dict]
+        self.conjunction_watchlist = []  # fast-access watchlist
+        self.last_full_ca_time = None
+        self.last_track_sample_time = None
+        self.last_metrics_sample_time = None
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     def load_initial_data(self, sat_file, deb_file):
         with open(sat_file) as f:
@@ -62,6 +77,7 @@ class StateManager:
         self.fuel = {}
         self.masses = {}
         self.last_burn_time = {}
+        self.track_history = {}
 
         for i, obj in enumerate(all_objects):
             oid = obj["id"]
@@ -75,10 +91,11 @@ class StateManager:
 
             if obj.get("type", "DEBRIS") == "SATELLITE":
                 self.sat_ids.append(oid)
-                self.objects[oid] = {"type": "SATELLITE", "status": "NOMINAL"}
+                self.objects[oid] = {"type": "SATELLITE", "status": "NOMINAL", "drift_km": 0.0}
                 self.fuel[oid] = obj.get("fuel_kg", INITIAL_FUEL)
                 self.masses[oid] = obj.get("mass_kg", INITIAL_WET_MASS)
                 self.last_burn_time[oid] = None
+                self.track_history[oid] = []
 
                 if "nominal_slot" in obj:
                     ns = obj["nominal_slot"]
@@ -94,8 +111,21 @@ class StateManager:
                 self.deb_ids.append(oid)
                 self.objects[oid] = {"type": "DEBRIS", "status": "ACTIVE"}
 
+        self.sample_tracks(force=True)
+        self.sample_metrics(force=True)
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     def update_from_telemetry(self, timestamp_str, objects_list):
-        self.timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        """Update state from incoming telemetry.
+
+        FIX: telemetry cannot rewind simulation time.
+        """
+        telemetry_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        self.last_telemetry_time = telemetry_time
+        if telemetry_time > self.timestamp:
+            self.timestamp = telemetry_time
+
         for obj in objects_list:
             oid = obj["id"]
             r = np.array(_extract_vec3(obj, "r"))
@@ -122,8 +152,91 @@ class StateManager:
                     self.last_burn_time[oid] = None
                     self.nominal_slots[oid] = r.copy()
                     self.nominal_slot_vels[oid] = v.copy()
+                    self.track_history[oid] = []
                 else:
                     self.deb_ids.append(oid)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Track & metrics sampling (for frontend history)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def sample_tracks(self, force=False):
+        """Sample current lat/lon/alt for each satellite and store in history."""
+        now = self.timestamp
+        if not force and self.last_track_sample_time is not None:
+            elapsed = (now - self.last_track_sample_time).total_seconds()
+            if elapsed < TRACK_SAMPLE_SECONDS:
+                return
+
+        from backend.physics.coordinates import eci_to_lla
+        ts_unix = now.timestamp()
+        max_samples = int(TRACK_HISTORY_MINUTES * 60 / TRACK_SAMPLE_SECONDS) + 5
+
+        for sid in self.sat_ids:
+            if sid not in self._id_to_idx:
+                continue
+            idx = self._id_to_idx[sid]
+            r = self.positions[idx]
+            try:
+                lat, lon, alt = eci_to_lla(r, ts_unix)
+                if not (np.isfinite(lat) and np.isfinite(lon) and np.isfinite(alt)):
+                    continue
+                entry = {
+                    "t": now.isoformat(),
+                    "lat": round(float(lat), 3),
+                    "lon": round(float(lon), 3),
+                    "alt": round(float(alt), 1),
+                }
+                if sid not in self.track_history:
+                    self.track_history[sid] = []
+                self.track_history[sid].append(entry)
+                # Trim to max_samples
+                if len(self.track_history[sid]) > max_samples:
+                    self.track_history[sid] = self.track_history[sid][-max_samples:]
+            except Exception:
+                pass
+
+        self.last_track_sample_time = now
+
+    def sample_metrics(self, force=False):
+        """Append a fleet-wide metrics snapshot for frontend charting."""
+        now = self.timestamp
+        if not force and self.last_metrics_sample_time is not None:
+            elapsed = (now - self.last_metrics_sample_time).total_seconds()
+            if elapsed < METRICS_SAMPLE_SECONDS:
+                return
+
+        fleet_fuel = float(sum(self.fuel.get(s, 0.0) for s in self.sat_ids))
+        entry = {
+            "t": now.isoformat(),
+            "fleet_fuel_kg": round(fleet_fuel, 2),
+            "collisions_avoided": int(self.total_collisions_avoided),
+            "maneuvers_executed": int(len(self.maneuver_log)),
+            "fleet_uptime": None,  # filled by station-keeping
+        }
+        self.metrics_history.append(entry)
+        # Keep last 180 samples (~3 hours at 60s cadence)
+        if len(self.metrics_history) > 180:
+            self.metrics_history = self.metrics_history[-180:]
+
+        self.last_metrics_sample_time = now
+
+    def get_track_window(self, sat_id):
+        """Return stored track history for a satellite."""
+        return self.track_history.get(sat_id, [])
+
+    def set_watchlist(self, cdms):
+        """Cache a fast-access watchlist from CDM list."""
+        self.conjunction_watchlist = [
+            c for c in cdms
+            if c["risk_level"] in ("CRITICAL", "RED")
+            or (c["risk_level"] == "YELLOW" and c["tca_seconds"] <= 3600.0)
+            or c["miss_distance_km"] <= 10.0
+        ]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Basic query helpers
+    # ─────────────────────────────────────────────────────────────────────────
 
     def get_satellite_indices(self):
         return [self._id_to_idx[sid] for sid in self.sat_ids if sid in self._id_to_idx]

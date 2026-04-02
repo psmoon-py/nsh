@@ -2,21 +2,14 @@
 Station-Keeping Manager — monitors satellite drift from nominal slots
 and triggers recovery maneuvers when needed.
 
-From the PS:
-  - "Drift Tolerance: A satellite is considered 'Nominal' as long as its
-     true position remains within a 10 km spherical radius of its
-     designated slot."
-  - "Uptime Penalty: If a collision avoidance maneuver pushes the satellite
-     outside this bounding box, the system logs a Service Outage. Your
-     Uptime Score degrades exponentially for every second spent outside
-     the box."
-  - "Recovery Burn Requirement: Every evasion maneuver must be paired with
-     a calculated recovery trajectory to return the satellite to its slot
-     once the debris threat has safely passed."
+Uptime is scored BOTH as raw fraction AND exponential decay score (per PS).
+Recovery burns are guarded: won't fire while active threat CDM is present.
 """
 import numpy as np
 from datetime import datetime, timezone, timedelta
-from backend.config import SLOT_TOLERANCE, COOLDOWN_SECONDS, SIGNAL_DELAY
+from backend.config import (
+    SLOT_TOLERANCE, COOLDOWN_SECONDS, SIGNAL_DELAY, UPTIME_DECAY_TAU_SECONDS
+)
 
 
 class StationKeepingManager:
@@ -25,17 +18,11 @@ class StationKeepingManager:
     def __init__(self, state_manager, scheduler):
         self.sm = state_manager
         self.scheduler = scheduler
-
-        # Track uptime per satellite
-        # uptime_log[sat_id] = [(start_outage_time, end_outage_time), ...]
-        self.outage_log = {}
-        self._currently_out = {}  # sat_id → outage_start_time
+        self.outage_log = {}       # sat_id -> [(start, end), ...]
+        self._currently_out = {}   # sat_id -> outage_start_time
 
     def update_all_statuses(self):
-        """Check every satellite's slot compliance. Called each sim step.
-
-        Updates the status field in state_manager and tracks outage windows.
-        """
+        """Check every satellite's slot compliance. Called each sim step."""
         now = self.sm.timestamp
 
         for sat_id in self.sm.sat_ids:
@@ -45,13 +32,10 @@ class StationKeepingManager:
             idx = self.sm._id_to_idx[sat_id]
             current_r = self.sm.positions[idx]
             nominal_r = self.sm.nominal_slots[sat_id]
-
             drift = np.linalg.norm(current_r - nominal_r)
 
             if drift <= SLOT_TOLERANCE:
                 self.sm.objects[sat_id]["status"] = "NOMINAL"
-
-                # If was out of slot, close the outage window
                 if sat_id in self._currently_out:
                     start = self._currently_out.pop(sat_id)
                     if sat_id not in self.outage_log:
@@ -59,67 +43,77 @@ class StationKeepingManager:
                     self.outage_log[sat_id].append((start, now))
             else:
                 self.sm.objects[sat_id]["status"] = "OUT_OF_SLOT"
-
-                # Start tracking outage if not already
                 if sat_id not in self._currently_out:
                     self._currently_out[sat_id] = now
 
-            # Store drift distance for diagnostics
-            self.sm.objects[sat_id]["drift_km"] = round(drift, 3)
+            self.sm.objects[sat_id]["drift_km"] = round(float(drift), 3)
 
     def get_drift(self, sat_id: str) -> float:
-        """Get current drift distance from nominal slot in km."""
         if sat_id not in self.sm.nominal_slots:
             return 0.0
         idx = self.sm._id_to_idx[sat_id]
-        current_r = self.sm.positions[idx]
-        nominal_r = self.sm.nominal_slots[sat_id]
-        return float(np.linalg.norm(current_r - nominal_r))
+        return float(np.linalg.norm(
+            self.sm.positions[idx] - self.sm.nominal_slots[sat_id]
+        ))
 
-    def get_uptime_fraction(self, sat_id: str, window_seconds: float = 86400) -> float:
-        """Compute uptime fraction for a satellite over the given window.
-
-        Returns float 0.0–1.0 representing fraction of time in-slot.
-        """
-        if sat_id not in self.outage_log and sat_id not in self._currently_out:
-            return 1.0
-
-        total_outage = 0.0
+    def _total_outage_seconds(self, sat_id: str, window_seconds: float = 86400) -> float:
+        """Compute total out-of-slot time in seconds within the window."""
         now = self.sm.timestamp
+        window_start = now - timedelta(seconds=window_seconds)
+        total = 0.0
 
-        # Completed outages
         for start, end in self.outage_log.get(sat_id, []):
-            # Only count outages within the window
-            window_start = now - timedelta(seconds=window_seconds)
             s = max(start, window_start)
             e = min(end, now)
             if e > s:
-                total_outage += (e - s).total_seconds()
+                total += (e - s).total_seconds()
 
-        # Ongoing outage
         if sat_id in self._currently_out:
-            window_start = now - timedelta(seconds=window_seconds)
             s = max(self._currently_out[sat_id], window_start)
-            total_outage += (now - s).total_seconds()
+            total += (now - s).total_seconds()
 
-        uptime = max(0, window_seconds - total_outage) / window_seconds
-        return round(uptime, 4)
+        return total
+
+    def get_uptime_fraction(self, sat_id: str, window_seconds: float = 86400) -> float:
+        """Raw uptime fraction 0.0–1.0."""
+        total_outage = self._total_outage_seconds(sat_id, window_seconds)
+        return round(max(0.0, window_seconds - total_outage) / window_seconds, 4)
+
+    def get_uptime_exponential_score(self, sat_id: str, window_seconds: float = 86400) -> float:
+        """Exponential uptime score (per PS: 'degrades exponentially').
+
+        score = exp(-total_outage / UPTIME_DECAY_TAU_SECONDS)
+        Perfect in-slot = 1.0, large outage → 0.
+        """
+        total_outage = self._total_outage_seconds(sat_id, window_seconds)
+        return round(float(np.exp(-total_outage / UPTIME_DECAY_TAU_SECONDS)), 4)
 
     def get_fleet_uptime(self) -> float:
-        """Average uptime across all satellites."""
+        """Average raw uptime across all satellites."""
         if not self.sm.sat_ids:
             return 1.0
-        uptimes = [self.get_uptime_fraction(sid) for sid in self.sm.sat_ids]
-        return round(sum(uptimes) / len(uptimes), 4)
+        return round(
+            sum(self.get_uptime_fraction(sid) for sid in self.sm.sat_ids) / len(self.sm.sat_ids),
+            4
+        )
+
+    def get_fleet_uptime_exponential_score(self) -> float:
+        """Average exponential uptime score across all satellites."""
+        if not self.sm.sat_ids:
+            return 1.0
+        return round(
+            sum(self.get_uptime_exponential_score(sid) for sid in self.sm.sat_ids) / len(self.sm.sat_ids),
+            4
+        )
 
     def trigger_recovery_if_needed(self, sat_id: str):
-        """Check if a satellite is out-of-slot and has no pending recovery
-        burn, then schedule one.
+        """Schedule recovery burn for out-of-slot satellite.
 
-        Only triggers if:
-        - Satellite is OUT_OF_SLOT
-        - No pending RECOVERY or EVASION burn exists for this satellite
-        - Cooldown has elapsed since last burn
+        Guards:
+          - Must be OUT_OF_SLOT
+          - No pending RECOVERY or EVASION
+          - No active CRITICAL/RED CDM for this satellite (wait for threat to pass)
+          - Cooldown elapsed
         """
         from backend.engine.scheduler import ManeuverCommand
 
@@ -127,31 +121,39 @@ class StationKeepingManager:
         if status == "NOMINAL":
             return
 
-        # Check if recovery already queued
+        # Guard: active threat still present for this satellite
+        active_threat = any(
+            c.get("sat_id") == sat_id
+            and c.get("risk_level") in ("CRITICAL", "RED")
+            for c in self.sm.active_cdms
+        )
+        if active_threat:
+            return
+
+        # Guard: pending maneuver
         pending = self.scheduler.get_pending_for_satellite(sat_id)
-        has_recovery = any(c.burn_type == "RECOVERY" for c in pending)
-        has_evasion = any(c.burn_type == "EVASION" for c in pending)
+        if any(c.burn_type in ("RECOVERY", "EVASION") for c in pending):
+            return
 
-        if has_recovery or has_evasion:
-            return  # Wait for existing maneuver to complete
-
-        # Check cooldown
+        # Guard: cooldown
         last_burn = self.sm.last_burn_time.get(sat_id)
         if last_burn is not None:
             gap = (self.sm.timestamp - last_burn).total_seconds()
             if gap < COOLDOWN_SECONDS:
-                return  # Still in cooldown
+                return
 
-        # Compute recovery ΔV
+        # Use pending_recovery_intent if available
+        intent = self.sm.objects.get(sat_id, {}).get("pending_recovery_intent")
+        if intent is not None:
+            self.sm.objects[sat_id].pop("pending_recovery_intent", None)
+
         from backend.physics.maneuver import compute_recovery_dv
-
         sat_r, sat_v = self.sm.get_state(sat_id)
         nominal_r = self.sm.nominal_slots.get(sat_id)
         if nominal_r is None:
             return
 
         dv_eci = compute_recovery_dv(sat_r, sat_v, nominal_r)
-
         burn_time = self.sm.timestamp + timedelta(seconds=SIGNAL_DELAY + 5)
 
         cmd = ManeuverCommand(

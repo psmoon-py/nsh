@@ -268,6 +268,19 @@ class GroundStationNetwork:
         has_los, _ = self.has_los_any_station(sat_eci, timestamp_unix)
         return not has_los
 
+
+    def to_snapshot(self):
+        """Serialize ground stations for snapshot API response."""
+        return [
+            {
+                "id":           gs.station_id,
+                "name":         gs.name,
+                "lat":          gs.lat_deg,
+                "lon":          gs.lon_deg,
+                "min_elev_deg": gs.min_elev_deg,
+            }
+            for gs in self.stations
+        ]
     def check_burn_uploadable(self, sat_eci, timestamp_unix, burn_time_unix):
         """Validate that a burn command can be uploaded to the satellite.
 

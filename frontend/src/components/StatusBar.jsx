@@ -1,18 +1,11 @@
 import React from 'react';
 
 export default function StatusBar({
-  timestamp,
-  satCount,
-  debrisCount,
-  nominalCount,
-  cdmCount,
-  criticalCount,
-  totalFuel,
-  simSpeed,
-  onSimSpeedChange,
-  onAdvance,
-  loading,
-  error,
+  timestamp, satCount, debrisCount, nominalCount,
+  cdmCount, criticalCount, totalFuel,
+  simSpeed, onSimSpeedChange, onAdvance,
+  loading, error,
+  fleetUptimeExp, totalManeuvers, totalCollisionsAvoided,
 }) {
   const timeStr = timestamp !== '—'
     ? new Date(timestamp).toISOString().replace('T', '  ').replace('.000Z', ' UTC')
@@ -30,8 +23,8 @@ export default function StatusBar({
           </svg>
         </div>
         <div>
-          <div className="status-bar__title">Orbital Insight</div>
-          <div className="status-bar__subtitle">Autonomous Constellation Manager v1.0</div>
+          <div className="status-bar__title">Project AETHER</div>
+          <div className="status-bar__subtitle">Autonomous Constellation Manager</div>
         </div>
       </div>
 
@@ -46,11 +39,11 @@ export default function StatusBar({
           <span className="metric__value metric__value--green">{nominalCount}</span>
         </div>
         <div className="metric">
-          <span className="metric__label">Debris Tracked</span>
+          <span className="metric__label">Debris</span>
           <span className="metric__value">{debrisCount.toLocaleString()}</span>
         </div>
         <div className="metric">
-          <span className="metric__label">CDM Warnings</span>
+          <span className="metric__label">CDMs</span>
           <span className={`metric__value ${cdmCount > 0 ? 'metric__value--amber' : 'metric__value--green'}`}>
             {cdmCount}
           </span>
@@ -62,8 +55,14 @@ export default function StatusBar({
           </span>
         </div>
         <div className="metric">
-          <span className="metric__label">Fleet Fuel</span>
-          <span className="metric__value">{Math.round(totalFuel)} kg</span>
+          <span className="metric__label">Uptime</span>
+          <span className="metric__value metric__value--green">
+            {fleetUptimeExp != null ? `${(fleetUptimeExp * 100).toFixed(1)}%` : '—'}
+          </span>
+        </div>
+        <div className="metric">
+          <span className="metric__label">Avoided</span>
+          <span className="metric__value metric__value--green">{totalCollisionsAvoided}</span>
         </div>
 
         {/* Sim controls */}
@@ -75,11 +74,8 @@ export default function StatusBar({
               background: 'var(--surface-raised)',
               border: '1px solid var(--border)',
               color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              padding: '3px 6px',
-              borderRadius: 3,
-              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              padding: '3px 6px', borderRadius: 3, cursor: 'pointer',
             }}
           >
             <option value={10}>+10s</option>
@@ -93,21 +89,16 @@ export default function StatusBar({
             onClick={onAdvance}
             disabled={loading}
             style={{
-              background: 'var(--cyan)',
-              color: '#000',
-              border: 'none',
-              padding: '4px 12px',
-              borderRadius: 3,
-              fontFamily: 'var(--font-display)',
-              fontWeight: 600,
-              fontSize: 10,
-              textTransform: 'uppercase',
-              letterSpacing: 1,
+              background: loading ? 'var(--surface-raised)' : 'var(--cyan)',
+              color: loading ? 'var(--text-dim)' : '#000',
+              border: 'none', padding: '5px 14px', borderRadius: 3,
+              fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 10,
+              textTransform: 'uppercase', letterSpacing: 1.5,
               cursor: loading ? 'wait' : 'pointer',
-              opacity: loading ? 0.5 : 1,
+              transition: 'all 0.15s',
             }}
           >
-            ▶ Advance
+            {loading ? '⟳' : '▶'} {loading ? 'RUNNING' : 'ADVANCE'}
           </button>
         </div>
       </div>

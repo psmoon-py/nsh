@@ -1,10 +1,4 @@
-/* ─── MINIMAL GLOBAL RESET ──────────────────────────────────────────────────────
-   This file ONLY resets browser defaults.
-   ALL dashboard styling lives in src/styles/dashboard.css.
-   The old Vite default index.css was overriding the dashboard layout
-   (white background, 1126px centered #root) — that's been removed here.
-──────────────────────────────────────────────────────────────────────────────── */
-
+/* Minimal global reset — all dashboard styles in src/styles/dashboard.css */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -14,12 +8,11 @@
 html, body {
   height: 100%;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   height: 100%;
   width: 100%;
 }
-
--webkit-font-smoothing: antialiased;
--moz-osx-font-smoothing: grayscale;

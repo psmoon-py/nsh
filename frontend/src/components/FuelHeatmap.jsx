@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 const INITIAL_FUEL = 50.0;
 
 function getFuelClass(fuel) {
   const pct = fuel / INITIAL_FUEL;
-  if (pct > 0.8) return 'fuel-cell--full';
-  if (pct > 0.5) return 'fuel-cell--good';
+  if (pct > 0.8)  return 'fuel-cell--full';
+  if (pct > 0.5)  return 'fuel-cell--good';
   if (pct > 0.25) return 'fuel-cell--mid';
   if (pct > 0.05) return 'fuel-cell--low';
   return 'fuel-cell--critical';
@@ -13,16 +13,23 @@ function getFuelClass(fuel) {
 
 function getFuelColor(fuel) {
   const pct = fuel / INITIAL_FUEL;
-  if (pct > 0.8) return '#00e676';
-  if (pct > 0.5) return '#2ecc71';
+  if (pct > 0.8)  return '#00e676';
+  if (pct > 0.5)  return '#2ecc71';
   if (pct > 0.25) return '#ffab00';
   if (pct > 0.05) return '#e67e22';
-  return '#ff3d4a';
+  return '#ff3b3b';
 }
 
+/**
+ * Fleet Fuel Heatmap + real ΔV efficiency chart from backend metrics_history.
+ *
+ * FIX: removed fake per-satellite maneuver estimate (estManeuvers = fuelUsed / 1.2).
+ * Now uses actual cumulative data from metrics_history.
+ */
 export default function FuelHeatmap({
   satellites = [], selectedSat, onSelectSat,
   totalCollisionsAvoided = 0, totalFuelConsumed = 0,
+  metricsHistory = [],
 }) {
   if (satellites.length === 0) {
     return (
@@ -32,23 +39,29 @@ export default function FuelHeatmap({
     );
   }
 
+  // Build efficiency curve from metrics_history
+  const efficiencyData = useMemo(() => {
+    if (metricsHistory.length < 2) return null;
+    const initial = metricsHistory[0]?.fleet_fuel_kg || (satellites.length * INITIAL_FUEL);
+    return metricsHistory.map((m) => ({
+      fuelConsumed: Math.max(0, initial - (m.fleet_fuel_kg || 0)),
+      evasions:     m.collisions_avoided || 0,
+    }));
+  }, [metricsHistory, satellites.length]);
+
   return (
     <div>
-      {/* Fuel Grid Heatmap */}
+      {/* ─── Fuel Grid ─── */}
       <div className="fuel-grid">
         {satellites.map((sat) => {
-          const fuel = sat.fuel_kg || 0;
-          const pct = Math.round((fuel / INITIAL_FUEL) * 100);
+          const fuel      = sat.fuel_kg || 0;
+          const pct       = Math.round((fuel / INITIAL_FUEL) * 100);
           const isSelected = sat.id === selectedSat;
-
           return (
             <div
               key={sat.id}
               className={`fuel-cell ${getFuelClass(fuel)}`}
-              style={{
-                outline: isSelected ? '2px solid #00e5ff' : 'none',
-                outlineOffset: -1,
-              }}
+              style={{ outline: isSelected ? '2px solid #00e5ff' : 'none', outlineOffset: -1 }}
               title={`${sat.id}: ${fuel.toFixed(1)} kg (${pct}%)`}
               onClick={() => onSelectSat(sat.id)}
             >
@@ -58,110 +71,122 @@ export default function FuelHeatmap({
         })}
       </div>
 
-      {/* Mini bar chart */}
-      <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-end', gap: 1, height: 30 }}>
+      {/* ─── Mini bar chart ─── */}
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'flex-end', gap: 1, height: 28 }}>
         {satellites.map((sat) => {
           const pct = (sat.fuel_kg || 0) / INITIAL_FUEL;
           return (
-            <div
-              key={sat.id}
-              style={{
-                flex: 1,
-                height: `${Math.max(2, pct * 100)}%`,
-                background: getFuelColor(sat.fuel_kg || 0),
-                opacity: sat.id === selectedSat ? 1 : 0.5,
-                borderRadius: '2px 2px 0 0',
-                cursor: 'pointer', transition: 'opacity 0.15s',
-              }}
-              onClick={() => onSelectSat(sat.id)}
-              title={`${sat.id}: ${(sat.fuel_kg || 0).toFixed(1)} kg`}
-            />
+            <div key={sat.id} style={{
+              flex: 1,
+              height: `${Math.max(3, pct * 100)}%`,
+              background: getFuelColor(sat.fuel_kg || 0),
+              opacity: sat.id === selectedSat ? 1 : 0.55,
+              borderRadius: '1px 1px 0 0',
+              cursor: 'pointer', transition: 'opacity 0.15s',
+            }} onClick={() => onSelectSat(sat.id)} title={`${sat.id}: ${(sat.fuel_kg||0).toFixed(1)} kg`} />
           );
         })}
       </div>
 
-      {/* Summary line */}
+      {/* ─── Summary ─── */}
       <div style={{
-        marginTop: 6, display: 'flex', justifyContent: 'space-between',
-        fontFamily: "var(--font-mono)", fontSize: 9, color: 'var(--text-dim)',
+        marginTop: 5, display: 'flex', justifyContent: 'space-between',
+        fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-dim)',
       }}>
-        <span>Min: {Math.min(...satellites.map((s) => s.fuel_kg || 0)).toFixed(1)} kg</span>
-        <span>Avg: {(satellites.reduce((a, s) => a + (s.fuel_kg || 0), 0) / satellites.length).toFixed(1)} kg</span>
-        <span>Max: {Math.max(...satellites.map((s) => s.fuel_kg || 0)).toFixed(1)} kg</span>
+        <span>Min: {Math.min(...satellites.map(s => s.fuel_kg||0)).toFixed(1)} kg</span>
+        <span>Avg: {(satellites.reduce((a,s)=>a+(s.fuel_kg||0),0)/satellites.length).toFixed(1)} kg</span>
+        <span>Max: {Math.max(...satellites.map(s => s.fuel_kg||0)).toFixed(1)} kg</span>
       </div>
 
-      {/* ═══ Fuel Consumed vs Collisions Avoided (PS Required) ═══ */}
-      <div style={{
-        marginTop: 12, paddingTop: 10,
-        borderTop: '1px solid var(--border)',
-      }}>
+      {/* ─── ΔV Cost Analysis (real backend data) ─── */}
+      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
         <div style={{
-          fontSize: 9, textTransform: 'uppercase', letterSpacing: 1,
-          color: 'var(--text-dim)', fontWeight: 600, marginBottom: 8,
+          fontFamily: 'var(--font-display)', fontSize: 8, textTransform: 'uppercase',
+          letterSpacing: 1.5, color: 'var(--text-dim)', marginBottom: 6,
         }}>
           ΔV Cost Analysis
         </div>
 
-        {/* Simple scatter-style visualization */}
-        <svg viewBox="0 0 280 80" style={{ width: '100%', height: 'auto' }}>
-          {/* Axes */}
-          <line x1={30} y1={70} x2={270} y2={70} stroke="#1e2a3e" strokeWidth={0.5} />
-          <line x1={30} y1={10} x2={30} y2={70} stroke="#1e2a3e" strokeWidth={0.5} />
+        {efficiencyData && efficiencyData.length >= 2 ? (
+          <svg viewBox="0 0 280 75" style={{ width: '100%', height: 'auto' }}>
+            {/* Axes */}
+            <line x1={30} y1={65} x2={270} y2={65} stroke="#1e2a3e" strokeWidth={0.6} />
+            <line x1={30} y1={10} x2={30}  y2={65} stroke="#1e2a3e" strokeWidth={0.6} />
 
-          {/* Axis labels */}
-          <text x={150} y={79} fill="#4a5a72" fontSize={6}
-            fontFamily="'IBM Plex Mono', monospace" textAnchor="middle">
-            Fuel Consumed (kg)
-          </text>
-          <text x={5} y={40} fill="#4a5a72" fontSize={6}
-            fontFamily="'IBM Plex Mono', monospace"
-            transform="rotate(-90 5 40)" textAnchor="middle">
-            Evasions
-          </text>
+            {/* Axis labels */}
+            <text x={150} y={74} fill="#3a4a62" fontSize={6}
+              fontFamily="'JetBrains Mono', monospace" textAnchor="middle">
+              Fleet Fuel Consumed (kg)
+            </text>
+            <text x={5} y={38} fill="#3a4a62" fontSize={6}
+              fontFamily="'JetBrains Mono', monospace"
+              transform="rotate(-90 5 38)" textAnchor="middle">
+              Evasions
+            </text>
 
-          {/* Per-satellite dots: x = fuel consumed, y = number of maneuvers (estimated from fuel usage) */}
-          {satellites.map((sat, i) => {
-            const fuelUsed = INITIAL_FUEL - (sat.fuel_kg || 0);
-            const maxFuelAxis = Math.max(INITIAL_FUEL * 0.5, 10);
-            const x = 30 + (fuelUsed / maxFuelAxis) * 240;
-            // Estimate maneuvers from fuel used (each evasion ~0.5-2 kg)
-            const estManeuvers = Math.round(fuelUsed / 1.2);
-            const maxManeuvers = 20;
-            const y = 70 - (Math.min(estManeuvers, maxManeuvers) / maxManeuvers) * 55;
+            {/* Efficiency curve */}
+            {(() => {
+              const maxFuel  = Math.max(...efficiencyData.map(d => d.fuelConsumed), 1);
+              const maxEvas  = Math.max(...efficiencyData.map(d => d.evasions), 1);
+              const pts = efficiencyData.map(d => {
+                const x = 30 + (d.fuelConsumed / maxFuel) * 240;
+                const y = 65 - (d.evasions / maxEvas) * 52;
+                return `${Math.min(x,268)},${Math.max(y,12)}`;
+              }).join(' ');
+              return (
+                <>
+                  <polyline points={pts} fill="none"
+                    stroke="var(--cyan)" strokeWidth={1.2} opacity={0.6} />
+                  {efficiencyData.filter((_, i) => i % 10 === 0).map((d, i) => {
+                    const x = 30 + (d.fuelConsumed / maxFuel) * 240;
+                    const y = 65 - (d.evasions / maxEvas) * 52;
+                    return (
+                      <circle key={i} cx={Math.min(x,268)} cy={Math.max(y,12)}
+                        r={1.5} fill="var(--cyan)" opacity={0.7} />
+                    );
+                  })}
+                </>
+              );
+            })()}
 
-            const isSelected = sat.id === selectedSat;
-            const isNominal = sat.status === 'NOMINAL';
-            const color = isSelected ? '#00e5ff' : isNominal ? '#00e676' : '#ffab00';
+            {/* Grid lines */}
+            {[0.25, 0.5, 0.75].map(f => (
+              <line key={f} x1={30} y1={65 - f*52} x2={270} y2={65 - f*52}
+                stroke="#1e2a3e" strokeWidth={0.3} strokeDasharray="2 4" />
+            ))}
+          </svg>
+        ) : (
+          /* Fallback scatter for current state */
+          <svg viewBox="0 0 280 75" style={{ width: '100%', height: 'auto' }}>
+            <line x1={30} y1={65} x2={270} y2={65} stroke="#1e2a3e" strokeWidth={0.6} />
+            <line x1={30} y1={10} x2={30}  y2={65} stroke="#1e2a3e" strokeWidth={0.6} />
+            <text x={150} y={74} fill="#3a4a62" fontSize={6}
+              fontFamily="'JetBrains Mono', monospace" textAnchor="middle">
+              Fleet Fuel Consumed (kg)
+            </text>
+            {satellites.map((sat) => {
+              const fuelUsed = INITIAL_FUEL - (sat.fuel_kg || 0);
+              const x = 30 + (fuelUsed / Math.max(INITIAL_FUEL * 0.5, 1)) * 240;
+              const color = getFuelColor(sat.fuel_kg || 0);
+              return (
+                <circle key={sat.id}
+                  cx={Math.min(x, 268)} cy={37}
+                  r={sat.id === selectedSat ? 4 : 2}
+                  fill={color} opacity={0.7}
+                  onClick={() => onSelectSat(sat.id)}
+                  style={{ cursor: 'pointer' }}
+                />
+              );
+            })}
+          </svg>
+        )}
 
-            return (
-              <g key={sat.id} onClick={() => onSelectSat(sat.id)} style={{ cursor: 'pointer' }}>
-                <circle cx={Math.min(x, 268)} cy={Math.max(y, 12)} r={isSelected ? 4 : 2.5}
-                  fill={color} opacity={0.8} />
-                {isSelected && (
-                  <text x={Math.min(x, 268) + 6} y={Math.max(y, 12) + 3}
-                    fill={color} fontSize={5} fontFamily="'IBM Plex Mono', monospace">
-                    {sat.id.replace('SAT-Alpha-', 'A')}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {/* Grid lines */}
-          {[0.25, 0.5, 0.75].map((frac) => (
-            <line key={frac} x1={30} y1={70 - frac * 60} x2={270} y2={70 - frac * 60}
-              stroke="#1e2a3e" strokeWidth={0.3} strokeDasharray="2 3" />
-          ))}
-        </svg>
-
-        {/* Fleet summary */}
         <div style={{
-          display: 'flex', justifyContent: 'space-between',
+          display: 'flex', justifyContent: 'space-between', marginTop: 3,
           fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-dim)',
-          marginTop: 4,
         }}>
-          <span>Fleet ΔV: {totalFuelConsumed.toFixed(1)} kg</span>
-          <span>Evasions: {totalCollisionsAvoided}</span>
+          <span style={{ color: 'var(--cyan)' }}>ΔV: {totalFuelConsumed.toFixed(1)} kg</span>
+          <span style={{ color: 'var(--green)' }}>✓ {totalCollisionsAvoided} avoided</span>
         </div>
       </div>
     </div>

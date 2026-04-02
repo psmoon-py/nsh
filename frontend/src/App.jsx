@@ -14,18 +14,28 @@ export default function App() {
   const { data, loading, error, refresh } = useSnapshot();
   const [selectedSat, setSelectedSat] = useState(null);
   const [simSpeed, setSimSpeed]     = useState(60);
-  const [viewMode, setViewMode]     = useState('3d');
+  // Default to 2D map (operational view per blueprint)
+  const [viewMode, setViewMode]     = useState('2d');
+  const [advancing, setAdvancing]   = useState(false);
 
   const handleAdvance = useCallback(async () => {
-    await postSimulateStep(simSpeed);
-    refresh();
-  }, [simSpeed, refresh]);
+    if (advancing) return;
+    setAdvancing(true);
+    try {
+      await postSimulateStep(simSpeed);
+      await refresh();
+    } finally {
+      setAdvancing(false);
+    }
+  }, [simSpeed, refresh, advancing]);
 
   const satellites    = data?.satellites    || [];
   const debrisCloud   = data?.debris_cloud  || [];
   const cdmWarnings   = data?.cdm_warnings  || [];
   const maneuverQueue = data?.maneuver_queue || [];
   const timestamp     = data?.timestamp     || '—';
+  const groundStations = data?.ground_stations || [];
+  const metricsHistory = data?.metrics_history || [];
 
   const selectedSatData = selectedSat
     ? satellites.find((s) => s.id === selectedSat)
@@ -35,9 +45,14 @@ export default function App() {
   const criticalCdms  = cdmWarnings.filter((c) => c.risk_level === 'CRITICAL').length;
   const totalFuel     = satellites.reduce((sum, s) => sum + (s.fuel_kg || 0), 0);
 
+  // CDMs affecting selected satellite (for overlay strip)
+  const selectedSatCdms = selectedSat
+    ? cdmWarnings.filter((c) => c.sat_id === selectedSat)
+    : [];
+
   return (
     <div className="dashboard">
-      {/* ─── Top Header ─── */}
+      {/* ─── Header ─── */}
       <StatusBar
         timestamp={timestamp}
         satCount={satellites.length}
@@ -49,25 +64,18 @@ export default function App() {
         simSpeed={simSpeed}
         onSimSpeedChange={setSimSpeed}
         onAdvance={handleAdvance}
-        loading={loading}
+        loading={loading || advancing}
         error={error}
+        fleetUptimeExp={data?.fleet_uptime_exp}
+        totalManeuvers={data?.total_maneuvers_executed || 0}
+        totalCollisionsAvoided={data?.total_collisions_avoided || 0}
       />
 
       {/* ─── Main Area ─── */}
       <div className="main-area">
         <div className="globe-container">
-          {/* View mode toggle */}
+          {/* View toggle */}
           <div className="view-toggle">
-            <button
-              onClick={() => setViewMode('3d')}
-              style={{
-                background: viewMode === '3d' ? 'var(--cyan)' : 'transparent',
-                color: viewMode === '3d' ? '#000' : 'var(--text-dim)',
-                fontWeight: viewMode === '3d' ? 700 : 400,
-              }}
-            >
-              3D GLOBE
-            </button>
             <button
               onClick={() => setViewMode('2d')}
               style={{
@@ -78,9 +86,29 @@ export default function App() {
             >
               2D MAP
             </button>
+            <button
+              onClick={() => setViewMode('3d')}
+              style={{
+                background: viewMode === '3d' ? 'var(--cyan)' : 'transparent',
+                color: viewMode === '3d' ? '#000' : 'var(--text-dim)',
+                fontWeight: viewMode === '3d' ? 700 : 400,
+              }}
+            >
+              3D GLOBE
+            </button>
           </div>
 
-          {viewMode === '3d' ? (
+          {viewMode === '2d' ? (
+            <GroundTrack2D
+              satellites={satellites}
+              debrisCloud={debrisCloud}
+              timestamp={timestamp}
+              selectedSat={selectedSat}
+              onSelectSat={setSelectedSat}
+              groundStations={groundStations}
+              cdmWarnings={cdmWarnings}
+            />
+          ) : (
             <Globe3D
               satellites={satellites}
               debrisCloud={debrisCloud}
@@ -89,18 +117,9 @@ export default function App() {
               onSelectSat={setSelectedSat}
               timestamp={timestamp}
             />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-              <GroundTrack2D
-                satellites={satellites}
-                debrisCloud={debrisCloud}
-                timestamp={timestamp}
-                selectedSat={selectedSat}
-                onSelectSat={setSelectedSat}
-              />
-            </div>
           )}
 
+          {/* Bottom-left status badges */}
           <div className="globe-overlay">
             <span className="globe-overlay__badge globe-overlay__badge--live">
               LIVE TRACKING
@@ -108,7 +127,34 @@ export default function App() {
             <span className="globe-overlay__badge">
               {satellites.length} SAT &middot; {debrisCloud.length} DEB
             </span>
+            {selectedSatCdms.length > 0 && (
+              <span className="globe-overlay__badge" style={{
+                borderColor: 'var(--red-dim)', color: 'var(--red)',
+              }}>
+                ⚠ {selectedSatCdms.length} CDM{selectedSatCdms.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
+
+          {/* Selected satellite quick strip */}
+          {selectedSatData && (
+            <div style={{
+              position: 'absolute', top: 44, left: 10, right: 10,
+              display: 'flex', gap: 8, zIndex: 15, pointerEvents: 'none',
+            }}>
+              <div style={{
+                background: 'rgba(9,13,24,0.92)',
+                border: '1px solid var(--cyan-dim)',
+                borderRadius: 3, padding: '3px 10px',
+                fontFamily: 'var(--font-mono)', fontSize: 9,
+                color: 'var(--cyan)', letterSpacing: 1, backdropFilter: 'blur(8px)',
+              }}>
+                {selectedSatData.id} &nbsp;|&nbsp; ⛽ {selectedSatData.fuel_kg?.toFixed(1)} kg
+                &nbsp;|&nbsp; {selectedSatData.status}
+                &nbsp;|&nbsp; LOS: {selectedSatData.los_now ? '✓' : '✗'}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bottom-panels">
@@ -148,6 +194,7 @@ export default function App() {
             onSelectSat={setSelectedSat}
             totalCollisionsAvoided={data?.total_collisions_avoided || 0}
             totalFuelConsumed={(50 * satellites.length) - totalFuel}
+            metricsHistory={metricsHistory}
           />
         </div>
 
