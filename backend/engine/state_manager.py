@@ -47,6 +47,8 @@ class StateManager:
         self.active_cdms = []
         self.maneuver_log = []
         self.total_collisions_avoided = 0
+        self.acted_cdm_pairs = {}   # (sat_id, deb_id) -> metadata
+        self.collided_pairs = set() # {(sat_id, deb_id)} distinct physical collisions
 
         # Extended state for richer frontend / scoring
         self.last_telemetry_time = None
@@ -78,6 +80,8 @@ class StateManager:
         self.masses = {}
         self.last_burn_time = {}
         self.track_history = {}
+        self.acted_cdm_pairs = {}
+        self.collided_pairs = set()
 
         for i, obj in enumerate(all_objects):
             oid = obj["id"]
@@ -256,3 +260,46 @@ class StateManager:
         nominal_r = self.nominal_slots[sat_id]
         distance = np.linalg.norm(current_r - nominal_r)
         return "NOMINAL" if distance <= SLOT_TOLERANCE else "OUT_OF_SLOT"
+
+
+    def cdm_pair_key(self, sat_id, deb_id):
+        return tuple(sorted((sat_id, deb_id)))
+
+    def mark_cdm_handled(self, sat_id, deb_id, until_time, burn_id=None, reason="EVASION_SCHEDULED"):
+        key = self.cdm_pair_key(sat_id, deb_id)
+        self.acted_cdm_pairs[key] = {
+            "until": until_time,
+            "burn_id": burn_id,
+            "reason": reason,
+        }
+
+    def is_cdm_handled(self, sat_id, deb_id, now=None):
+        now = now or self.timestamp
+        key = self.cdm_pair_key(sat_id, deb_id)
+        meta = self.acted_cdm_pairs.get(key)
+        if meta is None:
+            return False
+        until = meta.get("until")
+        if until is not None and now >= until:
+            self.acted_cdm_pairs.pop(key, None)
+            return False
+        return True
+
+    def expire_handled_cdms(self, active_pairs=None, now=None):
+        now = now or self.timestamp
+        active_pairs = set(active_pairs or [])
+        drop = []
+        for key, meta in self.acted_cdm_pairs.items():
+            until = meta.get("until")
+            if until is not None and now >= until:
+                drop.append(key)
+            elif active_pairs and key not in active_pairs and until is not None and (until - now).total_seconds() > 900.0:
+                drop.append(key)
+        for key in drop:
+            self.acted_cdm_pairs.pop(key, None)
+
+    def has_pair_collided(self, sat_id, deb_id):
+        return self.cdm_pair_key(sat_id, deb_id) in self.collided_pairs
+
+    def mark_pair_collided(self, sat_id, deb_id):
+        self.collided_pairs.add(self.cdm_pair_key(sat_id, deb_id))

@@ -1,0 +1,26 @@
+Exact backend patch bundle
+
+Apply these files into your repo at the same paths:
+- backend/engine/scheduler.py
+- backend/engine/state_manager.py
+- backend/main.py
+- scripts/real_data_validation_lib.py
+
+What this patch fixes:
+1. LOS validation now checks whether a command can be uploaded before burn time, instead of incorrectly requiring LOS at the current instant.
+2. Duplicate auto-evasion for the same sat/debris threat is suppressed with acted CDM pair tracking.
+3. Collision counting is de-duplicated so one physical collision pair is counted once, not repeatedly across steps.
+4. Validation suite can reset the backend world to a clean empty state before loading telemetry.
+5. Seeded real-data campaign now marks whether a case is actually uplink-feasible under the PS constraints.
+
+Tests run on the patched bundle:
+- pytest -q tests/test_exact_burn_timing.py tests/test_sequential_fuel.py tests/test_stationkeeping_score.py tests/test_snapshot_contract.py tests/test_conjunction_gate.py
+  Result: 9 passed, 6 skipped
+- pytest -q tests/test_collision_scenario_regression.py
+  Result: 1 passed
+- python -m py_compile on all patched files
+  Result: clean
+
+Important honesty note:
+This materially fixes the concrete backend bugs identified from your reports.
+It does not guarantee a hackathon win or universal correctness for every imaginable orbital edge case.

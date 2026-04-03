@@ -1,0 +1,1032 @@
+--- /tmp/newproj/backend/main.py	2026-04-02 22:38:50.000000000 +0000
++++ /tmp/newproj_patched/backend/main.py	2026-04-03 00:05:34.535909985 +0000
+@@ -1,493 +1,536 @@
+-"""
+-FastAPI application — Autonomous Constellation Manager API.
+-Exposes all endpoints on port 8000 as required by the problem statement.
+-
+-Key improvements over prior version:
+-  - Event-driven simulate_step: burns execute at their exact boundary time,
+-    not at the end of the sub-step (physically correct impulsive burn timing).
+-  - POST /api/maneuver/schedule returns 202 Accepted on success (per PS spec).
+-  - Snapshot returns enriched CDMs (approach_angle_deg, relative_speed_kms),
+-    per-satellite tracks, ground stations, metrics_history, exponential uptime.
+-  - Watchlist-based interval collision refinement avoids missed mid-step collisions.
+-  - Full conjunction assessment throttled to FULL_CA_REFRESH_SECONDS.
+-"""
+-import os
+-import numpy as np
+-from datetime import datetime, timezone, timedelta
+-from fastapi import FastAPI
+-from fastapi.responses import JSONResponse
+-from fastapi.staticfiles import StaticFiles
+-from fastapi.middleware.cors import CORSMiddleware
+-
+-from backend.models import (
+-    TelemetryInput, TelemetryResponse,
+-    ManeuverInput, ManeuverResponse,
+-    SimulateStepInput, SimulateStepResponse,
+-)
+-from backend.config import (
+-    RK4_TIMESTEP, COLLISION_THRESHOLD, SIGNAL_DELAY,
+-    FULL_CA_REFRESH_SECONDS, INTERVAL_COLLISION_NEARBY_KM,
+-    SNAPSHOT_DEFAULT_DEBRIS_LIMIT, SNAPSHOT_MAX_CDM, SNAPSHOT_MAX_QUEUE,
+-    TRACK_PREDICTION_MINUTES,
+-)
+-from backend.engine.state_manager import StateManager
+-from backend.engine.conjunction import ConjunctionDetector
+-from backend.engine.ground_stations import GroundStationNetwork
+-from backend.engine.scheduler import ManeuverScheduler, ManeuverCommand
+-from backend.engine.station_keeping import StationKeepingManager
+-from backend.physics.propagator import propagate_batch, propagate_single
+-from backend.physics.coordinates import eci_to_lla
+-from backend.physics.maneuver import compute_fuel_consumed
+-from backend.utils.logger import logger
+-
+-
+-def np_safe(val):
+-    """Recursively convert numpy scalars/arrays to native Python."""
+-    if isinstance(val, (np.integer,)):   return int(val)
+-    if isinstance(val, (np.floating,)):  return float(val)
+-    if isinstance(val, np.ndarray):      return val.tolist()
+-    if isinstance(val, dict):            return {k: np_safe(v) for k, v in val.items()}
+-    if isinstance(val, (list, tuple)):   return [np_safe(v) for v in val]
+-    return val
+-
+-
+-# ══════════════════════════════════════════════════════════
+-app = FastAPI(title="ACM — Autonomous Constellation Manager", version="2.0.0")
+-
+-app.add_middleware(
+-    CORSMiddleware,
+-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+-)
+-
+-sm        = StateManager()
+-cd        = ConjunctionDetector(sm)
+-gn        = GroundStationNetwork()
+-scheduler = ManeuverScheduler(sm, gn)
+-sk        = StationKeepingManager(sm, scheduler)
+-
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+-gs_csv   = os.path.join(DATA_DIR, "ground_stations.csv")
+-if os.path.exists(gs_csv):
+-    gn.load_from_csv(gs_csv)
+-else:
+-    gn.load_defaults()
+-
+-sat_file = os.path.join(DATA_DIR, "satellites_init.json")
+-deb_file = os.path.join(DATA_DIR, "debris_init.json")
+-if os.path.exists(sat_file) and os.path.exists(deb_file):
+-    sm.load_initial_data(sat_file, deb_file)
+-    logger.telemetry_ingested(len(sm.ids), 0, sm.timestamp.isoformat())
+-
+-
+-# ──────────────────────────────────────────────────────────
+-# Internal helpers
+-# ──────────────────────────────────────────────────────────
+-
+-def _run_conjunction_and_evasion(force=False):
+-    """Run conjunction assessment and auto-schedule evasions.
+-
+-    Throttled by FULL_CA_REFRESH_SECONDS unless force=True.
+-    """
+-    now = sm.timestamp
+-    if (not force and sm.last_full_ca_time is not None
+-            and (now - sm.last_full_ca_time).total_seconds() < FULL_CA_REFRESH_SECONDS):
+-        return sm.active_cdms  # Return cached
+-
+-    cdm_warnings = cd.run_full_assessment()
+-    sm.active_cdms      = cdm_warnings
+-    sm.last_full_ca_time = now
+-
+-    for cdm in cdm_warnings:
+-        logger.conjunction_detected(
+-            cdm["sat_id"], cdm["deb_id"],
+-            cdm["tca_seconds"], cdm["miss_distance_km"], cdm["risk_level"],
+-        )
+-        if cdm["risk_level"] in ("CRITICAL", "RED"):
+-            sat_id  = cdm["sat_id"]
+-            pending = scheduler.get_pending_for_satellite(sat_id)
+-            if any(c.burn_type == "EVASION" for c in pending):
+-                continue
+-            evasion_cmd = scheduler.auto_schedule_evasion(cdm)
+-            if evasion_cmd:
+-                logger.maneuver_scheduled(
+-                    evasion_cmd.sat_id, evasion_cmd.burn_id,
+-                    evasion_cmd.burn_type, evasion_cmd.delta_v_magnitude_ms,
+-                    evasion_cmd.burn_time,
+-                )
+-
+-    scheduler.check_and_schedule_eol()
+-    return cdm_warnings
+-
+-
+-def _propagate_all(dt_seconds: float):
+-    """Propagate all objects (satellites + debris) forward by dt_seconds."""
+-    if sm.positions.shape[0] == 0 or dt_seconds <= 0:
+-        return
+-    states     = np.hstack([sm.positions, sm.velocities])
+-    new_states = propagate_batch(states, dt_seconds, RK4_TIMESTEP)
+-    sm.positions  = new_states[:, :3]
+-    sm.velocities = new_states[:, 3:]
+-
+-
+-def _propagate_nominal_slots(dt_seconds: float):
+-    """Propagate all nominal slots forward by dt_seconds."""
+-    if not sm.nominal_slots or dt_seconds <= 0:
+-        return
+-    slot_ids    = list(sm.nominal_slots.keys())
+-    slot_states = []
+-    for sid in slot_ids:
+-        r = sm.nominal_slots[sid]
+-        v = sm.nominal_slot_vels.get(sid, np.zeros(3))
+-        slot_states.append(np.concatenate([r, v]))
+-    slot_arr     = np.array(slot_states)
+-    new_slot_arr = propagate_batch(slot_arr, dt_seconds, RK4_TIMESTEP)
+-    for i, sid in enumerate(slot_ids):
+-        sm.nominal_slots[sid]      = new_slot_arr[i, :3]
+-        sm.nominal_slot_vels[sid]  = new_slot_arr[i, 3:]
+-
+-
+-def _check_collisions() -> int:
+-    """Check for actual collisions (miss distance < 100m) at current positions."""
+-    sat_indices = sm.get_satellite_indices()
+-    deb_indices = sm.get_debris_indices()
+-    if not sat_indices or not deb_indices:
+-        return 0
+-    from scipy.spatial import KDTree
+-    deb_pos = sm.positions[deb_indices]
+-    tree     = KDTree(deb_pos)
+-    collisions = 0
+-    for si in sat_indices:
+-        nearby = tree.query_ball_point(sm.positions[si], r=COLLISION_THRESHOLD)
+-        if nearby:
+-            collisions += len(nearby)
+-            for j in nearby:
+-                deb_idx = deb_indices[j]
+-                dist = float(np.linalg.norm(sm.positions[si] - sm.positions[deb_idx]))
+-                logger.collision_detected(sm.ids[si], sm.ids[deb_idx], dist)
+-    return collisions
+-
+-
+-def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
+-    """Refined mid-interval collision check using the active watchlist.
+-
+-    Uses a linear TCA estimate inside the current interval to decide whether a
+-    pair deserves fine propagation. This is much safer than sampling only the
+-    start of the interval and much cheaper than refining every pair blindly.
+-    """
+-    if not sm.conjunction_watchlist or dt_seconds <= 0:
+-        return 0
+-
+-    collisions = 0
+-    seen_pairs = set()
+-
+-    for cdm in sm.conjunction_watchlist:
+-        sat_id = cdm["sat_id"]
+-        deb_id = cdm["deb_id"]
+-        pair_key = tuple(sorted((sat_id, deb_id)))
+-        if pair_key in seen_pairs:
+-            continue
+-        seen_pairs.add(pair_key)
+-
+-        if sat_id not in sm._id_to_idx or deb_id not in sm._id_to_idx:
+-            continue
+-
+-        sat_r, sat_v = sm.get_state(sat_id)
+-        deb_r, deb_v = sm.get_state(deb_id)
+-
+-        r_rel = np.array(deb_r) - np.array(sat_r)
+-        v_rel = np.array(deb_v) - np.array(sat_v)
+-        v2 = float(np.dot(v_rel, v_rel)) + 1e-18
+-        t_lin = float(np.clip(-np.dot(r_rel, v_rel) / v2, 0.0, dt_seconds))
+-        miss_vec = r_rel + v_rel * t_lin
+-        d_lin = float(np.linalg.norm(miss_vec))
+-        d_now = float(np.linalg.norm(r_rel))
+-
+-        if min(d_now, d_lin) > INTERVAL_COLLISION_NEARBY_KM:
+-            continue
+-
+-        fine_dt = 0.1 if min(d_now, d_lin) < 1.0 else 0.25 if min(d_now, d_lin) < 2.0 else 0.5
+-        n_samples = max(1, int(np.ceil(dt_seconds / fine_dt)))
+-
+-        sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
+-        dx, dy, dz, dvx, dvy, dvz = *deb_r, *deb_v
+-
+-        for step_idx in range(n_samples + 1):
+-            dist = float(np.sqrt((sx-dx)**2 + (sy-dy)**2 + (sz-dz)**2))
+-            if dist < COLLISION_THRESHOLD:
+-                collisions += 1
+-                logger.collision_detected(sat_id, deb_id, dist)
+-                break
+-            if step_idx < n_samples:
+-                dt_step = min(fine_dt, dt_seconds - step_idx * fine_dt)
+-                if dt_step <= 0:
+-                    continue
+-                sx, sy, sz, svx, svy, svz = propagate_single(
+-                    sx, sy, sz, svx, svy, svz, dt_step, RK4_TIMESTEP
+-                )
+-                dx, dy, dz, dvx, dvy, dvz = propagate_single(
+-                    dx, dy, dz, dvx, dvy, dvz, dt_step, RK4_TIMESTEP
+-                )
+-
+-    return collisions
+-
+-
+-def _get_step_boundaries(old_time: datetime, new_time: datetime):
+-    """Get sorted list of time boundaries within [old_time, new_time].
+-
+-    Boundaries include:
+-      - old_time
+-      - every queued burn time in the interval
+-      - periodic conjunction refresh checkpoints for long steps
+-      - new_time
+-
+-    Burns execute exactly at their boundary, not at end of the enclosing step.
+-    """
+-    boundaries = [old_time]
+-    for cmd in scheduler.queue:
+-        if cmd.status == "PENDING" and old_time < cmd.burn_time <= new_time:
+-            boundaries.append(cmd.burn_time)
+-
+-    refresh = FULL_CA_REFRESH_SECONDS
+-    if refresh > 0:
+-        cursor = old_time + timedelta(seconds=refresh)
+-        while cursor < new_time:
+-            boundaries.append(cursor)
+-            cursor += timedelta(seconds=refresh)
+-
+-    boundaries.append(new_time)
+-    return sorted(set(boundaries))
+-
+-
+-def _predict_ground_track(sat_id: str, minutes: int):
+-    """Compute predicted future ground track for a satellite."""
+-    try:
+-        sat_r, sat_v = sm.get_state(sat_id)
+-        ts_unix  = sm.timestamp.timestamp()
+-        sample_s = 60.0
+-        n_samples = int(minutes * 60 / sample_s)
+-        track = []
+-        sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
+-        for i in range(n_samples):
+-            t = ts_unix + i * sample_s
+-            lat, lon, alt = eci_to_lla(np.array([sx, sy, sz]), t)
+-            if np.isfinite(lat) and np.isfinite(lon) and np.isfinite(alt):
+-                track.append({"lat": round(float(lat), 3), "lon": round(float(lon), 3), "alt": round(float(alt), 1)})
+-            if i < n_samples - 1:
+-                sx, sy, sz, svx, svy, svz = propagate_single(
+-                    sx, sy, sz, svx, svy, svz, sample_s, RK4_TIMESTEP
+-                )
+-        return track
+-    except Exception:
+-        return []
+-
+-
+-# ══════════════════════════════════════════════════════════
+-# POST /api/telemetry
+-# ══════════════════════════════════════════════════════════
+-
+-@app.post("/api/telemetry", response_model=TelemetryResponse)
+-async def ingest_telemetry(data: TelemetryInput):
+-    sm.update_from_telemetry(data.timestamp, [obj.model_dump() for obj in data.objects])
+-    cdm_warnings = _run_conjunction_and_evasion(force=True)
+-    sm.sample_tracks()
+-    logger.telemetry_ingested(len(data.objects), len(cdm_warnings), data.timestamp)
+-
+-    return TelemetryResponse(
+-        status="ACK",
+-        processed_count=len(data.objects),
+-        active_cdm_warnings=len(cdm_warnings),
+-    )
+-
+-
+-# ══════════════════════════════════════════════════════════
+-# POST /api/maneuver/schedule  — returns 202 on success per PS spec
+-# ══════════════════════════════════════════════════════════
+-
+-@app.post("/api/maneuver/schedule")
+-async def schedule_maneuver(data: ManeuverInput):
+-    sat_id = data.satelliteId
+-    if sat_id not in sm.objects:
+-        payload = ManeuverResponse(
+-            status="REJECTED",
+-            validation={"error": f"Satellite {sat_id} not found"},
+-        ).model_dump()
+-        return JSONResponse(status_code=200, content=payload)
+-
+-    burns = []
+-    for burn in data.maneuver_sequence:
+-        burns.append({
+-            "burn_id":       burn.burn_id,
+-            "burnTime":      burn.burnTime,
+-            "deltaV_vector": {
+-                "x": burn.deltaV_vector.x,
+-                "y": burn.deltaV_vector.y,
+-                "z": burn.deltaV_vector.z,
+-            },
+-            "type": "EVASION" if "EVASION" in burn.burn_id.upper() else "RECOVERY",
+-        })
+-
+-    success, msg, validation = scheduler.schedule_sequence(sat_id, burns)
+-
+-    if success:
+-        for burn in data.maneuver_sequence:
+-            dv = np.sqrt(burn.deltaV_vector.x**2 + burn.deltaV_vector.y**2 + burn.deltaV_vector.z**2)
+-            logger.maneuver_scheduled(sat_id, burn.burn_id, "MANUAL", float(dv * 1000), burn.burnTime)
+-
+-    payload = ManeuverResponse(
+-        status="SCHEDULED" if success else "REJECTED",
+-        validation=np_safe(validation) if validation else {"error": msg},
+-    ).model_dump()
+-
+-    # PS example shows 202 Accepted for successful scheduling
+-    status_code = 202 if success else 200
+-    return JSONResponse(status_code=status_code, content=payload)
+-
+-
+-# ══════════════════════════════════════════════════════════
+-# POST /api/simulate/step  — event-driven burn timing
+-# ══════════════════════════════════════════════════════════
+-
+-@app.post("/api/simulate/step", response_model=SimulateStepResponse)
+-async def simulate_step(data: SimulateStepInput):
+-    step = data.step_seconds
+-    if step <= 0:
+-        return SimulateStepResponse(
+-            status="STEP_COMPLETE",
+-            new_timestamp=sm.timestamp.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+-            collisions_detected=0,
+-            maneuvers_executed=0,
+-        )
+-
+-    old_time   = sm.timestamp
+-    new_time   = old_time + timedelta(seconds=step)
+-    boundaries = _get_step_boundaries(old_time, new_time)
+-
+-    total_collisions = 0
+-    total_maneuvers  = 0
+-    cursor           = old_time
+-
+-    for boundary in boundaries[1:]:
+-        dt = (boundary - cursor).total_seconds()
+-
+-        if dt > 0:
+-            # Check watchlist collisions BEFORE propagating
+-            total_collisions += _check_interval_collisions_watchlist(dt)
+-            _propagate_all(dt)
+-            _propagate_nominal_slots(dt)
+-            total_collisions += _check_collisions()
+-
+-        # Execute burns exactly at this boundary
+-        total_maneuvers += scheduler.execute_due_maneuvers(boundary, boundary)
+-
+-        sm.timestamp = boundary
+-        sm.sample_tracks()
+-        cursor = boundary
+-
+-    # Station-keeping update
+-    sk.update_all_statuses()
+-    sk.run_recovery_sweep()
+-
+-    # Update metrics with current uptime
+-    sm.sample_metrics()
+-    if sm.metrics_history:
+-        sm.metrics_history[-1]["fleet_uptime"] = float(sk.get_fleet_uptime())
+-
+-    # Refresh conjunction assessment only when needed.
+-    force_reassess = bool(total_maneuvers) or step >= FULL_CA_REFRESH_SECONDS
+-    _run_conjunction_and_evasion(force=force_reassess)
+-
+-    logger.sim_step_complete(new_time.isoformat(), total_collisions, total_maneuvers, len(sm.ids))
+-
+-    return SimulateStepResponse(
+-        status="STEP_COMPLETE",
+-        new_timestamp=new_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+-        collisions_detected=int(total_collisions),
+-        maneuvers_executed=int(total_maneuvers),
+-    )
+-
+-
+-# ══════════════════════════════════════════════════════════
+-# GET /api/visualization/snapshot
+-# ══════════════════════════════════════════════════════════
+-
+-@app.get("/api/visualization/snapshot")
+-async def get_snapshot():
+-    ts_unix = sm.timestamp.timestamp()
+-
+-    satellites = []
+-    for sid in sm.sat_ids:
+-        if sid not in sm._id_to_idx:
+-            continue
+-        idx   = sm._id_to_idx[sid]
+-        r     = sm.positions[idx]
+-        v     = sm.velocities[idx]
+-        lat, lon, alt = eci_to_lla(r, ts_unix)
+-
+-        # LOS status
+-        has_los, visible_stations = gn.has_los_any_station(r, ts_unix)
+-
+-        satellites.append({
+-            "id":       sid,
+-            "lat":      round(float(lat), 3),
+-            "lon":      round(float(lon), 3),
+-            "alt":      round(float(alt), 1),
+-            "fuel_kg":  round(float(sm.fuel.get(sid, 0)), 2),
+-            "status":   sm.objects.get(sid, {}).get("status", "NOMINAL"),
+-            "drift_km": float(sm.objects.get(sid, {}).get("drift_km", 0)),
+-            "r":        {"x": round(float(r[0]), 6), "y": round(float(r[1]), 6), "z": round(float(r[2]), 6)},
+-            "v":        {"x": round(float(v[0]), 6), "y": round(float(v[1]), 6), "z": round(float(v[2]), 6)},
+-            "los_now":  bool(has_los),
+-            "visible_station_ids": list(visible_stations),
+-            "past_track":   sm.get_track_window(sid),
+-            "future_track": _predict_ground_track(sid, TRACK_PREDICTION_MINUTES),
+-        })
+-
+-    # Debris cloud (tuple-based, PS-required compressed format)
+-    debris_cloud = []
+-    for did in sm.deb_ids[:SNAPSHOT_DEFAULT_DEBRIS_LIMIT]:
+-        if did not in sm._id_to_idx:
+-            continue
+-        idx = sm._id_to_idx[did]
+-        r   = sm.positions[idx]
+-        lat, lon, alt = eci_to_lla(r, ts_unix)
+-        debris_cloud.append([did, round(float(lat), 2), round(float(lon), 2), round(float(alt), 1)])
+-
+-    # Enriched CDMs
+-    safe_cdms = []
+-    for cdm in sm.active_cdms[:SNAPSHOT_MAX_CDM]:
+-        safe_cdms.append({
+-            "sat_id":              cdm.get("sat_id", ""),
+-            "deb_id":              cdm.get("deb_id", ""),
+-            "tca_seconds":         float(cdm.get("tca_seconds", 0)),
+-            "miss_distance_km":    float(cdm.get("miss_distance_km", 0)),
+-            "risk_level":          cdm.get("risk_level", "GREEN"),
+-            "current_distance_km": float(cdm.get("current_distance_km", 0)),
+-            "relative_speed_kms":  float(cdm.get("relative_speed_kms", 0)),
+-            "approach_angle_deg":  float(cdm.get("approach_angle_deg", 0)),
+-            "linear_tca_seconds":  float(cdm.get("linear_tca_seconds", 0)),
+-        })
+-
+-    safe_queue = [np_safe(cmd_dict) for cmd_dict in scheduler.get_queue_as_dicts(limit=SNAPSHOT_MAX_QUEUE)]
+-
+-    return {
+-        "timestamp":              sm.timestamp.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+-        "satellites":             satellites,
+-        "debris_cloud":           debris_cloud,
+-        "ground_stations":        gn.to_snapshot(),
+-        "cdm_warnings":           safe_cdms,
+-        "maneuver_queue":         safe_queue,
+-        "fleet_uptime":           float(sk.get_fleet_uptime()),
+-        "fleet_uptime_exp":       float(sk.get_fleet_uptime_exponential_score()),
+-        "metrics_history":        sm.metrics_history[-180:],
+-        "total_maneuvers_executed": len(scheduler.history),
+-        "total_collisions_avoided": int(sm.total_collisions_avoided),
+-    }
+-
+-
+-# ══════════════════════════════════════════════════════════
+-# Static frontend
+-# ══════════════════════════════════════════════════════════
+-
+-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+-if os.path.exists(FRONTEND_DIR):
+-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
++"""
++FastAPI application — Autonomous Constellation Manager API.
++Exposes all endpoints on port 8000 as required by the problem statement.
++
++Key improvements over prior version:
++  - Event-driven simulate_step: burns execute at their exact boundary time,
++    not at the end of the sub-step (physically correct impulsive burn timing).
++  - POST /api/maneuver/schedule returns 202 Accepted on success (per PS spec).
++  - Snapshot returns enriched CDMs (approach_angle_deg, relative_speed_kms),
++    per-satellite tracks, ground stations, metrics_history, exponential uptime.
++  - Watchlist-based interval collision refinement avoids missed mid-step collisions.
++  - Full conjunction assessment throttled to FULL_CA_REFRESH_SECONDS.
++"""
++import os
++import numpy as np
++from datetime import datetime, timezone, timedelta
++from fastapi import FastAPI
++from fastapi.responses import JSONResponse
++from fastapi.staticfiles import StaticFiles
++from fastapi.middleware.cors import CORSMiddleware
++
++from backend.models import (
++    TelemetryInput, TelemetryResponse,
++    ManeuverInput, ManeuverResponse,
++    SimulateStepInput, SimulateStepResponse,
++)
++from backend.config import (
++    RK4_TIMESTEP, COLLISION_THRESHOLD, SIGNAL_DELAY,
++    FULL_CA_REFRESH_SECONDS, INTERVAL_COLLISION_NEARBY_KM,
++    SNAPSHOT_DEFAULT_DEBRIS_LIMIT, SNAPSHOT_MAX_CDM, SNAPSHOT_MAX_QUEUE,
++    TRACK_PREDICTION_MINUTES,
++)
++from backend.engine.state_manager import StateManager
++from backend.engine.conjunction import ConjunctionDetector
++from backend.engine.ground_stations import GroundStationNetwork
++from backend.engine.scheduler import ManeuverScheduler, ManeuverCommand
++from backend.engine.station_keeping import StationKeepingManager
++from backend.physics.propagator import propagate_batch, propagate_single
++from backend.physics.coordinates import eci_to_lla
++from backend.physics.maneuver import compute_fuel_consumed
++from backend.utils.logger import logger
++
++
++def np_safe(val):
++    """Recursively convert numpy scalars/arrays to native Python."""
++    if isinstance(val, (np.integer,)):   return int(val)
++    if isinstance(val, (np.floating,)):  return float(val)
++    if isinstance(val, np.ndarray):      return val.tolist()
++    if isinstance(val, dict):            return {k: np_safe(v) for k, v in val.items()}
++    if isinstance(val, (list, tuple)):   return [np_safe(v) for v in val]
++    return val
++
++
++# ══════════════════════════════════════════════════════════
++app = FastAPI(title="ACM — Autonomous Constellation Manager", version="2.0.0")
++
++app.add_middleware(
++    CORSMiddleware,
++    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
++)
++
++DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++gs_csv   = os.path.join(DATA_DIR, "ground_stations.csv")
++sat_file = os.path.join(DATA_DIR, "satellites_init.json")
++deb_file = os.path.join(DATA_DIR, "debris_init.json")
++
++
++def _initialize_system(load_defaults: bool = True):
++    sm = StateManager()
++    cd = ConjunctionDetector(sm)
++    gn = GroundStationNetwork()
++    scheduler = ManeuverScheduler(sm, gn)
++    sk = StationKeepingManager(sm, scheduler)
++
++    if os.path.exists(gs_csv):
++        gn.load_from_csv(gs_csv)
++    else:
++        gn.load_defaults()
++
++    if load_defaults and os.path.exists(sat_file) and os.path.exists(deb_file):
++        sm.load_initial_data(sat_file, deb_file)
++        logger.telemetry_ingested(len(sm.ids), 0, sm.timestamp.isoformat())
++
++    return sm, cd, gn, scheduler, sk
++
++
++def reset_world(load_defaults: bool = False):
++    global sm, cd, gn, scheduler, sk
++    sm, cd, gn, scheduler, sk = _initialize_system(load_defaults=load_defaults)
++    return {
++        "status": "RESET",
++        "load_defaults": bool(load_defaults),
++        "satellites": len(sm.sat_ids),
++        "debris": len(sm.deb_ids),
++    }
++
++
++sm, cd, gn, scheduler, sk = _initialize_system(load_defaults=True)
++
++
++# ──────────────────────────────────────────────────────────
++# Internal helpers
++# ──────────────────────────────────────────────────────────
++
++def _run_conjunction_and_evasion(force=False):
++    """Run conjunction assessment and auto-schedule evasions.
++
++    Throttled by FULL_CA_REFRESH_SECONDS unless force=True.
++    Also suppresses duplicate actions for already-handled CDM pairs.
++    """
++    now = sm.timestamp
++    if (not force and sm.last_full_ca_time is not None
++            and (now - sm.last_full_ca_time).total_seconds() < FULL_CA_REFRESH_SECONDS):
++        return sm.active_cdms
++
++    cdm_warnings = cd.run_full_assessment()
++    sm.active_cdms = cdm_warnings
++    sm.last_full_ca_time = now
++
++    active_pairs = {sm.cdm_pair_key(c["sat_id"], c["deb_id"]) for c in cdm_warnings}
++    sm.expire_handled_cdms(active_pairs=active_pairs, now=now)
++
++    for cdm in cdm_warnings:
++        logger.conjunction_detected(
++            cdm["sat_id"], cdm["deb_id"],
++            cdm["tca_seconds"], cdm["miss_distance_km"], cdm["risk_level"],
++        )
++        if cdm["risk_level"] not in ("CRITICAL", "RED"):
++            continue
++
++        sat_id = cdm["sat_id"]
++        deb_id = cdm["deb_id"]
++        if sm.is_cdm_handled(sat_id, deb_id, now=now):
++            continue
++
++        pending = scheduler.get_pending_for_satellite(sat_id)
++        if any(c.burn_type == "EVASION" for c in pending):
++            continue
++
++        evasion_cmd = scheduler.auto_schedule_evasion(cdm)
++        if evasion_cmd:
++            logger.maneuver_scheduled(
++                evasion_cmd.sat_id, evasion_cmd.burn_id,
++                evasion_cmd.burn_type, evasion_cmd.delta_v_magnitude_ms,
++                evasion_cmd.burn_time,
++            )
++
++    scheduler.check_and_schedule_eol()
++    return cdm_warnings
++
++
++def _propagate_all(dt_seconds: float):
++    """Propagate all objects (satellites + debris) forward by dt_seconds."""
++    if sm.positions.shape[0] == 0 or dt_seconds <= 0:
++        return
++    states     = np.hstack([sm.positions, sm.velocities])
++    new_states = propagate_batch(states, dt_seconds, RK4_TIMESTEP)
++    sm.positions  = new_states[:, :3]
++    sm.velocities = new_states[:, 3:]
++
++
++def _propagate_nominal_slots(dt_seconds: float):
++    """Propagate all nominal slots forward by dt_seconds."""
++    if not sm.nominal_slots or dt_seconds <= 0:
++        return
++    slot_ids    = list(sm.nominal_slots.keys())
++    slot_states = []
++    for sid in slot_ids:
++        r = sm.nominal_slots[sid]
++        v = sm.nominal_slot_vels.get(sid, np.zeros(3))
++        slot_states.append(np.concatenate([r, v]))
++    slot_arr     = np.array(slot_states)
++    new_slot_arr = propagate_batch(slot_arr, dt_seconds, RK4_TIMESTEP)
++    for i, sid in enumerate(slot_ids):
++        sm.nominal_slots[sid]      = new_slot_arr[i, :3]
++        sm.nominal_slot_vels[sid]  = new_slot_arr[i, 3:]
++
++
++def _check_collisions() -> int:
++    """Check for actual collisions at current positions.
++
++    Counts each physical sat-debris collision pair only once across the full run.
++    """
++    sat_indices = sm.get_satellite_indices()
++    deb_indices = sm.get_debris_indices()
++    if not sat_indices or not deb_indices:
++        return 0
++    from scipy.spatial import KDTree
++    deb_pos = sm.positions[deb_indices]
++    tree = KDTree(deb_pos)
++    collisions = 0
++    for si in sat_indices:
++        sat_id = sm.ids[si]
++        nearby = tree.query_ball_point(sm.positions[si], r=COLLISION_THRESHOLD)
++        for j in nearby:
++            deb_idx = deb_indices[j]
++            deb_id = sm.ids[deb_idx]
++            if sm.has_pair_collided(sat_id, deb_id):
++                continue
++            dist = float(np.linalg.norm(sm.positions[si] - sm.positions[deb_idx]))
++            if dist < COLLISION_THRESHOLD:
++                sm.mark_pair_collided(sat_id, deb_id)
++                collisions += 1
++                logger.collision_detected(sat_id, deb_id, dist)
++    return collisions
++
++
++def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
++    """Refined mid-interval collision check using the active watchlist.
++
++    Counts each distinct pair only once across the whole run.
++    """
++    if not sm.conjunction_watchlist or dt_seconds <= 0:
++        return 0
++
++    collisions = 0
++    seen_pairs = set()
++
++    for cdm in sm.conjunction_watchlist:
++        sat_id = cdm["sat_id"]
++        deb_id = cdm["deb_id"]
++        pair_key = tuple(sorted((sat_id, deb_id)))
++        if pair_key in seen_pairs or sm.has_pair_collided(sat_id, deb_id):
++            continue
++        seen_pairs.add(pair_key)
++
++        if sat_id not in sm._id_to_idx or deb_id not in sm._id_to_idx:
++            continue
++
++        sat_r, sat_v = sm.get_state(sat_id)
++        deb_r, deb_v = sm.get_state(deb_id)
++
++        r_rel = np.array(deb_r) - np.array(sat_r)
++        v_rel = np.array(deb_v) - np.array(sat_v)
++        v2 = float(np.dot(v_rel, v_rel)) + 1e-18
++        t_lin = float(np.clip(-np.dot(r_rel, v_rel) / v2, 0.0, dt_seconds))
++        miss_vec = r_rel + v_rel * t_lin
++        d_lin = float(np.linalg.norm(miss_vec))
++        d_now = float(np.linalg.norm(r_rel))
++
++        if min(d_now, d_lin) > INTERVAL_COLLISION_NEARBY_KM:
++            continue
++
++        fine_dt = 0.1 if min(d_now, d_lin) < 1.0 else 0.25 if min(d_now, d_lin) < 2.0 else 0.5
++        n_samples = max(1, int(np.ceil(dt_seconds / fine_dt)))
++
++        sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
++        dx, dy, dz, dvx, dvy, dvz = *deb_r, *deb_v
++
++        for step_idx in range(n_samples + 1):
++            dist = float(np.sqrt((sx-dx)**2 + (sy-dy)**2 + (sz-dz)**2))
++            if dist < COLLISION_THRESHOLD:
++                sm.mark_pair_collided(sat_id, deb_id)
++                collisions += 1
++                logger.collision_detected(sat_id, deb_id, dist)
++                break
++            if step_idx < n_samples:
++                dt_step = min(fine_dt, dt_seconds - step_idx * fine_dt)
++                if dt_step <= 0:
++                    continue
++                sx, sy, sz, svx, svy, svz = propagate_single(
++                    sx, sy, sz, svx, svy, svz, dt_step, RK4_TIMESTEP
++                )
++                dx, dy, dz, dvx, dvy, dvz = propagate_single(
++                    dx, dy, dz, dvx, dvy, dvz, dt_step, RK4_TIMESTEP
++                )
++
++    return collisions
++
++
++def _get_step_boundaries(old_time: datetime, new_time: datetime):
++    """Get sorted list of time boundaries within [old_time, new_time].
++
++    Boundaries include:
++      - old_time
++      - every queued burn time in the interval
++      - periodic conjunction refresh checkpoints for long steps
++      - new_time
++
++    Burns execute exactly at their boundary, not at end of the enclosing step.
++    """
++    boundaries = [old_time]
++    for cmd in scheduler.queue:
++        if cmd.status == "PENDING" and old_time < cmd.burn_time <= new_time:
++            boundaries.append(cmd.burn_time)
++
++    refresh = FULL_CA_REFRESH_SECONDS
++    if refresh > 0:
++        cursor = old_time + timedelta(seconds=refresh)
++        while cursor < new_time:
++            boundaries.append(cursor)
++            cursor += timedelta(seconds=refresh)
++
++    boundaries.append(new_time)
++    return sorted(set(boundaries))
++
++
++def _predict_ground_track(sat_id: str, minutes: int):
++    """Compute predicted future ground track for a satellite."""
++    try:
++        sat_r, sat_v = sm.get_state(sat_id)
++        ts_unix  = sm.timestamp.timestamp()
++        sample_s = 60.0
++        n_samples = int(minutes * 60 / sample_s)
++        track = []
++        sx, sy, sz, svx, svy, svz = *sat_r, *sat_v
++        for i in range(n_samples):
++            t = ts_unix + i * sample_s
++            lat, lon, alt = eci_to_lla(np.array([sx, sy, sz]), t)
++            if np.isfinite(lat) and np.isfinite(lon) and np.isfinite(alt):
++                track.append({"lat": round(float(lat), 3), "lon": round(float(lon), 3), "alt": round(float(alt), 1)})
++            if i < n_samples - 1:
++                sx, sy, sz, svx, svy, svz = propagate_single(
++                    sx, sy, sz, svx, svy, svz, sample_s, RK4_TIMESTEP
++                )
++        return track
++    except Exception:
++        return []
++
++
++# ══════════════════════════════════════════════════════════
++# POST /api/telemetry
++# ══════════════════════════════════════════════════════════
++
++@app.post("/api/telemetry", response_model=TelemetryResponse)
++async def ingest_telemetry(data: TelemetryInput):
++    sm.update_from_telemetry(data.timestamp, [obj.model_dump() for obj in data.objects])
++    cdm_warnings = _run_conjunction_and_evasion(force=True)
++    sm.sample_tracks()
++    logger.telemetry_ingested(len(data.objects), len(cdm_warnings), data.timestamp)
++
++    return TelemetryResponse(
++        status="ACK",
++        processed_count=len(data.objects),
++        active_cdm_warnings=len(cdm_warnings),
++    )
++
++
++# ══════════════════════════════════════════════════════════
++# POST /api/maneuver/schedule  — returns 202 on success per PS spec
++# ══════════════════════════════════════════════════════════
++
++@app.post("/api/maneuver/schedule")
++async def schedule_maneuver(data: ManeuverInput):
++    sat_id = data.satelliteId
++    if sat_id not in sm.objects:
++        payload = ManeuverResponse(
++            status="REJECTED",
++            validation={"error": f"Satellite {sat_id} not found"},
++        ).model_dump()
++        return JSONResponse(status_code=200, content=payload)
++
++    burns = []
++    for burn in data.maneuver_sequence:
++        burns.append({
++            "burn_id":       burn.burn_id,
++            "burnTime":      burn.burnTime,
++            "deltaV_vector": {
++                "x": burn.deltaV_vector.x,
++                "y": burn.deltaV_vector.y,
++                "z": burn.deltaV_vector.z,
++            },
++            "type": "EVASION" if "EVASION" in burn.burn_id.upper() else "RECOVERY",
++        })
++
++    success, msg, validation = scheduler.schedule_sequence(sat_id, burns)
++
++    if success:
++        for burn in data.maneuver_sequence:
++            dv = np.sqrt(burn.deltaV_vector.x**2 + burn.deltaV_vector.y**2 + burn.deltaV_vector.z**2)
++            logger.maneuver_scheduled(sat_id, burn.burn_id, "MANUAL", float(dv * 1000), burn.burnTime)
++
++    payload = ManeuverResponse(
++        status="SCHEDULED" if success else "REJECTED",
++        validation=np_safe(validation) if validation else {"error": msg},
++    ).model_dump()
++
++    # PS example shows 202 Accepted for successful scheduling
++    status_code = 202 if success else 200
++    return JSONResponse(status_code=status_code, content=payload)
++
++
++# ══════════════════════════════════════════════════════════
++# POST /api/simulate/step  — event-driven burn timing
++# ══════════════════════════════════════════════════════════
++
++@app.post("/api/simulate/step", response_model=SimulateStepResponse)
++async def simulate_step(data: SimulateStepInput):
++    step = data.step_seconds
++    if step <= 0:
++        return SimulateStepResponse(
++            status="STEP_COMPLETE",
++            new_timestamp=sm.timestamp.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
++            collisions_detected=0,
++            maneuvers_executed=0,
++        )
++
++    old_time   = sm.timestamp
++    new_time   = old_time + timedelta(seconds=step)
++    boundaries = _get_step_boundaries(old_time, new_time)
++
++    total_collisions = 0
++    total_maneuvers  = 0
++    cursor           = old_time
++
++    for boundary in boundaries[1:]:
++        dt = (boundary - cursor).total_seconds()
++
++        if dt > 0:
++            # Check watchlist collisions BEFORE propagating
++            total_collisions += _check_interval_collisions_watchlist(dt)
++            _propagate_all(dt)
++            _propagate_nominal_slots(dt)
++            total_collisions += _check_collisions()
++
++        # Execute burns exactly at this boundary
++        total_maneuvers += scheduler.execute_due_maneuvers(boundary, boundary)
++
++        sm.timestamp = boundary
++        sm.sample_tracks()
++        cursor = boundary
++
++    # Station-keeping update
++    sk.update_all_statuses()
++    sk.run_recovery_sweep()
++
++    # Update metrics with current uptime
++    sm.sample_metrics()
++    if sm.metrics_history:
++        sm.metrics_history[-1]["fleet_uptime"] = float(sk.get_fleet_uptime())
++
++    # Refresh conjunction assessment only when needed.
++    force_reassess = bool(total_maneuvers) or step >= FULL_CA_REFRESH_SECONDS
++    _run_conjunction_and_evasion(force=force_reassess)
++
++    logger.sim_step_complete(new_time.isoformat(), total_collisions, total_maneuvers, len(sm.ids))
++
++    return SimulateStepResponse(
++        status="STEP_COMPLETE",
++        new_timestamp=new_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
++        collisions_detected=int(total_collisions),
++        maneuvers_executed=int(total_maneuvers),
++    )
++
++
++# ══════════════════════════════════════════════════════════
++# GET /api/visualization/snapshot
++# ══════════════════════════════════════════════════════════
++
++@app.get("/api/visualization/snapshot")
++async def get_snapshot():
++    ts_unix = sm.timestamp.timestamp()
++
++    satellites = []
++    for sid in sm.sat_ids:
++        if sid not in sm._id_to_idx:
++            continue
++        idx   = sm._id_to_idx[sid]
++        r     = sm.positions[idx]
++        v     = sm.velocities[idx]
++        lat, lon, alt = eci_to_lla(r, ts_unix)
++
++        # LOS status
++        has_los, visible_stations = gn.has_los_any_station(r, ts_unix)
++
++        satellites.append({
++            "id":       sid,
++            "lat":      round(float(lat), 3),
++            "lon":      round(float(lon), 3),
++            "alt":      round(float(alt), 1),
++            "fuel_kg":  round(float(sm.fuel.get(sid, 0)), 2),
++            "status":   sm.objects.get(sid, {}).get("status", "NOMINAL"),
++            "drift_km": float(sm.objects.get(sid, {}).get("drift_km", 0)),
++            "r":        {"x": round(float(r[0]), 6), "y": round(float(r[1]), 6), "z": round(float(r[2]), 6)},
++            "v":        {"x": round(float(v[0]), 6), "y": round(float(v[1]), 6), "z": round(float(v[2]), 6)},
++            "los_now":  bool(has_los),
++            "visible_station_ids": list(visible_stations),
++            "past_track":   sm.get_track_window(sid),
++            "future_track": _predict_ground_track(sid, TRACK_PREDICTION_MINUTES),
++        })
++
++    # Debris cloud (tuple-based, PS-required compressed format)
++    debris_cloud = []
++    for did in sm.deb_ids[:SNAPSHOT_DEFAULT_DEBRIS_LIMIT]:
++        if did not in sm._id_to_idx:
++            continue
++        idx = sm._id_to_idx[did]
++        r   = sm.positions[idx]
++        lat, lon, alt = eci_to_lla(r, ts_unix)
++        debris_cloud.append([did, round(float(lat), 2), round(float(lon), 2), round(float(alt), 1)])
++
++    # Enriched CDMs
++    safe_cdms = []
++    for cdm in sm.active_cdms[:SNAPSHOT_MAX_CDM]:
++        safe_cdms.append({
++            "sat_id":              cdm.get("sat_id", ""),
++            "deb_id":              cdm.get("deb_id", ""),
++            "tca_seconds":         float(cdm.get("tca_seconds", 0)),
++            "miss_distance_km":    float(cdm.get("miss_distance_km", 0)),
++            "risk_level":          cdm.get("risk_level", "GREEN"),
++            "current_distance_km": float(cdm.get("current_distance_km", 0)),
++            "relative_speed_kms":  float(cdm.get("relative_speed_kms", 0)),
++            "approach_angle_deg":  float(cdm.get("approach_angle_deg", 0)),
++            "linear_tca_seconds":  float(cdm.get("linear_tca_seconds", 0)),
++        })
++
++    safe_queue = [np_safe(cmd_dict) for cmd_dict in scheduler.get_queue_as_dicts(limit=SNAPSHOT_MAX_QUEUE)]
++
++    return {
++        "timestamp":              sm.timestamp.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
++        "satellites":             satellites,
++        "debris_cloud":           debris_cloud,
++        "ground_stations":        gn.to_snapshot(),
++        "cdm_warnings":           safe_cdms,
++        "maneuver_queue":         safe_queue,
++        "fleet_uptime":           float(sk.get_fleet_uptime()),
++        "fleet_uptime_exp":       float(sk.get_fleet_uptime_exponential_score()),
++        "metrics_history":        sm.metrics_history[-180:],
++        "total_maneuvers_executed": len(scheduler.history),
++        "total_collisions_avoided": int(sm.total_collisions_avoided),
++    }
++
++
++@app.post("/api/admin/reset_world")
++async def admin_reset_world(data: dict | None = None):
++    load_defaults = True if data is None else bool(data.get("load_defaults", True))
++    return reset_world(load_defaults=load_defaults)
++
++
++# ══════════════════════════════════════════════════════════
++# Static frontend
++# ══════════════════════════════════════════════════════════
++
++FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
++if os.path.exists(FRONTEND_DIR):
++    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

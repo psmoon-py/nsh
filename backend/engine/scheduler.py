@@ -4,14 +4,15 @@ Maneuver Scheduler — queues, validates, and executes burn commands.
 Enforces all constraints from the problem statement:
   - 600-second thermal cooldown between burns on the same satellite
   - 10-second signal delay (burn must be >= now + 10s)
-  - Ground station LOS required at command upload time
+  - Ground station LOS required at command upload time, not just "right now"
   - Max ΔV per burn: 15 m/s (0.015 km/s)
   - Sufficient fuel (Tsiolkovsky mass depletion)
 
-Key fixes vs original:
+Key fixes in this patch:
+  - validate_command() checks LOS at upload time = burn_time - SIGNAL_DELAY
+  - auto_schedule_evasion() suppresses duplicate actions for the same handled CDM pair
   - schedule_sequence() uses sequential mass depletion across burns
-  - auto_schedule_evasion() uses proper _plan_recovery_after_evasion()
-  - execute_due_maneuvers() increments total_collisions_avoided for EVASION burns
+  - execute_due_maneuvers() increments total_collisions_avoided only for linked EVASION burns
 """
 import numpy as np
 from datetime import datetime, timezone, timedelta
@@ -19,11 +20,10 @@ from typing import List, Optional, Tuple
 
 from backend.config import (
     COOLDOWN_SECONDS, SIGNAL_DELAY, MAX_DELTA_V,
-    EOL_FUEL_THRESHOLD, INITIAL_FUEL, MU, RE,
+    EOL_FUEL_THRESHOLD, INITIAL_FUEL, MU,
 )
 from backend.physics.maneuver import (
     compute_fuel_consumed, compute_evasion_dv, compute_recovery_dv,
-    rtn_to_eci, compute_rtn_frame,
 )
 
 
@@ -32,14 +32,21 @@ class ManeuverCommand:
 
     def __init__(self, sat_id, burn_id, burn_time, delta_v,
                  burn_type="EVASION", linked_cdm=None):
-        self.sat_id     = sat_id
-        self.burn_id    = burn_id
-        self.burn_time  = burn_time
-        self.delta_v    = delta_v       # km/s, ECI
-        self.burn_type  = burn_type     # EVASION, RECOVERY, EOL_GRAVEYARD, MANUAL
+        self.sat_id = sat_id
+        self.burn_id = burn_id
+        self.burn_time = burn_time
+        self.delta_v = np.array(delta_v, dtype=float)      # km/s, ECI
+        self.burn_type = burn_type                         # EVASION, RECOVERY, EOL_GRAVEYARD, MANUAL
         self.linked_cdm = linked_cdm
-        self.status     = "PENDING"
+        self.status = "PENDING"
         self.created_at = datetime.now(timezone.utc)
+
+        # Validation metadata for frontend / debugging
+        self.los_valid_at_schedule = False
+        self.blackout_overlap = False
+        self.cooldown_conflict = False
+        self.upload_station_id = None
+        self.validation_reason = None
 
     @property
     def delta_v_magnitude_ms(self):
@@ -51,25 +58,26 @@ class ManeuverCommand:
 
     def to_dict(self):
         return {
-            "sat_id":        self.sat_id,
-            "burn_id":       self.burn_id,
-            "burn_time":     self.burn_time.isoformat(),
-            "delta_v":       self.delta_v.tolist(),
-            "burn_type":     self.burn_type,
-            "status":        self.status,
+            "sat_id": self.sat_id,
+            "burn_id": self.burn_id,
+            "burn_time": self.burn_time.isoformat(),
+            "delta_v": self.delta_v.tolist(),
+            "burn_type": self.burn_type,
+            "status": self.status,
             "dv_magnitude_ms": round(self.delta_v_magnitude_ms, 4),
-            "burn_duration_seconds": 1,   # impulsive assumption
-            "los_valid_at_schedule": True,
-            "blackout_overlap": False,
-            "cooldown_conflict": False,
+            "burn_duration_seconds": 1,
+            "los_valid_at_schedule": bool(self.los_valid_at_schedule),
+            "blackout_overlap": bool(self.blackout_overlap),
+            "cooldown_conflict": bool(self.cooldown_conflict),
+            "upload_station_id": self.upload_station_id,
         }
 
 
 class ManeuverScheduler:
     def __init__(self, state_manager, ground_network):
-        self.sm  = state_manager
-        self.gn  = ground_network
-        self.queue:   List[ManeuverCommand] = []
+        self.sm = state_manager
+        self.gn = ground_network
+        self.queue: List[ManeuverCommand] = []
         self.history: List[ManeuverCommand] = []
         self._next_id = 1
 
@@ -79,55 +87,110 @@ class ManeuverScheduler:
         return bid
 
     # ─────────────────────────────────────────────────────
-    # Validation
+    # Propagation / validation helpers
     # ─────────────────────────────────────────────────────
 
-    def validate_command(self, cmd: ManeuverCommand) -> Tuple[bool, str]:
-        sat_id = cmd.sat_id
-
-        if sat_id not in self.sm.objects:
-            return False, f"Unknown satellite: {sat_id}"
-        if self.sm.objects[sat_id]["type"] != "SATELLITE":
-            return False, f"{sat_id} is not a satellite"
-
-        if cmd.delta_v_magnitude_kms > MAX_DELTA_V:
-            return False, f"ΔV {cmd.delta_v_magnitude_ms:.1f} m/s exceeds max {MAX_DELTA_V*1000:.0f} m/s"
-
-        ts_unix   = self.sm.timestamp.timestamp()
-        burn_unix = cmd.burn_time.timestamp()
-        if burn_unix < ts_unix + SIGNAL_DELAY:
-            return False, f"Burn time must be >= current time + {SIGNAL_DELAY}s"
-
-        fuel_needed = compute_fuel_consumed(self.sm.masses[sat_id], cmd.delta_v_magnitude_ms)
-        if fuel_needed > self.sm.fuel[sat_id]:
-            return False, f"Insufficient fuel: need {fuel_needed:.3f} kg, have {self.sm.fuel[sat_id]:.3f} kg"
-
-        cooldown_ok, cooldown_msg = self._check_cooldown(cmd)
-        if not cooldown_ok:
-            return False, cooldown_msg
-
-        sat_r, _ = self.sm.get_state(sat_id)
-        has_los, _ = self.gn.has_los_any_station(sat_r, ts_unix)
-        if not has_los:
-            return False, "No ground station LOS — satellite in blackout zone"
-
-        return True, "OK"
+    def _project_state(self, r, v, dt_seconds):
+        from backend.physics.propagator import propagate_single
+        result = propagate_single(
+            float(r[0]), float(r[1]), float(r[2]),
+            float(v[0]), float(v[1]), float(v[2]),
+            float(dt_seconds),
+            10.0,
+        )
+        return np.array(result[:3]), np.array(result[3:])
 
     def _check_cooldown(self, cmd: ManeuverCommand) -> Tuple[bool, str]:
-        sat_id    = cmd.sat_id
+        sat_id = cmd.sat_id
         burn_time = cmd.burn_time
+        cmd.cooldown_conflict = False
 
         if self.sm.last_burn_time.get(sat_id) is not None:
             gap = (burn_time - self.sm.last_burn_time[sat_id]).total_seconds()
             if gap < COOLDOWN_SECONDS:
+                cmd.cooldown_conflict = True
                 return False, f"Cooldown violation: {gap:.0f}s since last burn, need {COOLDOWN_SECONDS}s"
 
         for queued in self.queue:
             if queued.sat_id == sat_id and queued.status == "PENDING":
                 gap = abs((burn_time - queued.burn_time).total_seconds())
                 if gap < COOLDOWN_SECONDS:
+                    cmd.cooldown_conflict = True
                     return False, f"Cooldown conflict with {queued.burn_id}: {gap:.0f}s gap"
 
+        return True, "OK"
+
+    def _check_upload_los(self, sat_id: str, burn_time: datetime) -> Tuple[bool, str, Optional[str]]:
+        """Check that the command can be uploaded before burn time.
+
+        A command is feasible if there is LOS now, or if a future visibility window
+        begins before the latest allowable upload instant (burn_time - SIGNAL_DELAY).
+        """
+        now = self.sm.timestamp
+        upload_deadline = burn_time - timedelta(seconds=SIGNAL_DELAY)
+        if upload_deadline < now:
+            return False, f"Burn time must allow {SIGNAL_DELAY}s latency", None
+
+        sat_r, sat_v = self.sm.get_state(sat_id)
+        ts_unix = now.timestamp()
+
+        has_los, visible = self.gn.has_los_any_station(sat_r, ts_unix)
+        if has_los:
+            return True, "OK", visible[0] if visible else None
+
+        max_wait = max(0.0, (upload_deadline - now).total_seconds())
+        contact_wait, duration, station = self.gn.find_next_contact_window(sat_r, sat_v, ts_unix, max_wait=max(7200, int(max_wait) + 60))
+        if contact_wait is None:
+            return False, "No ground station LOS available before upload deadline", None
+        if contact_wait > max_wait:
+            return False, "Next ground station contact occurs after upload deadline", station
+        return True, "OK", station
+
+    # ─────────────────────────────────────────────────────
+    # Validation
+    # ─────────────────────────────────────────────────────
+
+    def validate_command(self, cmd: ManeuverCommand) -> Tuple[bool, str]:
+        sat_id = cmd.sat_id
+        cmd.validation_reason = None
+        cmd.blackout_overlap = False
+        cmd.los_valid_at_schedule = False
+        cmd.upload_station_id = None
+
+        if sat_id not in self.sm.objects:
+            cmd.validation_reason = f"Unknown satellite: {sat_id}"
+            return False, cmd.validation_reason
+        if self.sm.objects[sat_id]["type"] != "SATELLITE":
+            cmd.validation_reason = f"{sat_id} is not a satellite"
+            return False, cmd.validation_reason
+
+        if cmd.delta_v_magnitude_kms > MAX_DELTA_V:
+            cmd.validation_reason = f"ΔV {cmd.delta_v_magnitude_ms:.1f} m/s exceeds max {MAX_DELTA_V*1000:.0f} m/s"
+            return False, cmd.validation_reason
+
+        if cmd.burn_time.timestamp() < self.sm.timestamp.timestamp() + SIGNAL_DELAY:
+            cmd.validation_reason = f"Burn time must be >= current time + {SIGNAL_DELAY}s"
+            return False, cmd.validation_reason
+
+        fuel_needed = compute_fuel_consumed(self.sm.masses[sat_id], cmd.delta_v_magnitude_ms)
+        if fuel_needed > self.sm.fuel[sat_id]:
+            cmd.validation_reason = f"Insufficient fuel: need {fuel_needed:.3f} kg, have {self.sm.fuel[sat_id]:.3f} kg"
+            return False, cmd.validation_reason
+
+        cooldown_ok, cooldown_msg = self._check_cooldown(cmd)
+        if not cooldown_ok:
+            cmd.validation_reason = cooldown_msg
+            return False, cooldown_msg
+
+        los_ok, los_msg, station_id = self._check_upload_los(sat_id, cmd.burn_time)
+        cmd.los_valid_at_schedule = bool(los_ok)
+        cmd.blackout_overlap = not los_ok
+        cmd.upload_station_id = station_id
+        if not los_ok:
+            cmd.validation_reason = los_msg
+            return False, los_msg
+
+        cmd.validation_reason = "OK"
         return True, "OK"
 
     # ─────────────────────────────────────────────────────
@@ -137,14 +200,15 @@ class ManeuverScheduler:
     def schedule(self, cmd: ManeuverCommand) -> Tuple[bool, str, dict]:
         is_valid, reason = self.validate_command(cmd)
 
-        fuel_needed    = compute_fuel_consumed(self.sm.masses[cmd.sat_id], cmd.delta_v_magnitude_ms)
-        projected_mass = self.sm.masses[cmd.sat_id] - fuel_needed
+        fuel_needed = compute_fuel_consumed(self.sm.masses[cmd.sat_id], cmd.delta_v_magnitude_ms)
+        projected_mass = max(self.sm.masses[cmd.sat_id] - fuel_needed, 500.0)
 
         validation = {
-            "ground_station_los":         "blackout" not in reason.lower(),
-            "sufficient_fuel":            "fuel"     not in reason.lower(),
-            "cooldown_ok":                "cooldown" not in reason.lower(),
+            "ground_station_los": bool(cmd.los_valid_at_schedule),
+            "sufficient_fuel": "fuel" not in reason.lower(),
+            "cooldown_ok": not cmd.cooldown_conflict,
             "projected_mass_remaining_kg": round(projected_mass, 2),
+            "upload_station_id": cmd.upload_station_id,
         }
 
         if is_valid:
@@ -152,17 +216,12 @@ class ManeuverScheduler:
             self.queue.append(cmd)
             self.queue.sort(key=lambda c: c.burn_time)
             return True, "SCHEDULED", validation
-        else:
-            cmd.status = "REJECTED"
-            self.history.append(cmd)
-            return False, reason, validation
+
+        cmd.status = "REJECTED"
+        self.history.append(cmd)
+        return False, reason, validation
 
     def schedule_sequence(self, sat_id: str, burns: list) -> Tuple[bool, str, dict]:
-        """Schedule multi-burn sequence with sequential mass depletion.
-
-        FIX: each subsequent burn uses the reduced mass after prior burns,
-        giving physically correct fuel accounting (later burns slightly cheaper).
-        """
         commands = []
         for burn in burns:
             cmd = ManeuverCommand(
@@ -173,27 +232,27 @@ class ManeuverScheduler:
                     burn["deltaV_vector"]["x"],
                     burn["deltaV_vector"]["y"],
                     burn["deltaV_vector"]["z"],
-                ]),
+                ], dtype=float),
                 burn_type=burn.get("type", "MANUAL"),
             )
             commands.append(cmd)
 
-        # Validate all burns, accounting for sequential mass depletion
         projected_mass = self.sm.masses[sat_id]
         projected_fuel = self.sm.fuel[sat_id]
+        any_los = False
 
         for cmd in commands:
             is_valid, reason = self.validate_command(cmd)
             if not is_valid:
                 return False, f"Rejected at {cmd.burn_id}: {reason}", {}
 
-            # FIX: use projected (depleted) mass for fuel calculation
             fuel_needed = compute_fuel_consumed(projected_mass, cmd.delta_v_magnitude_ms)
             if fuel_needed > projected_fuel:
                 return False, f"Rejected at {cmd.burn_id}: insufficient sequential fuel", {}
 
             projected_mass = max(projected_mass - fuel_needed, 500.0)
             projected_fuel = max(projected_fuel - fuel_needed, 0.0)
+            any_los = any_los or cmd.los_valid_at_schedule
 
         for cmd in commands:
             cmd.status = "PENDING"
@@ -201,8 +260,8 @@ class ManeuverScheduler:
         self.queue.sort(key=lambda c: c.burn_time)
 
         return True, "SCHEDULED", {
-            "ground_station_los": True,
-            "sufficient_fuel":    True,
+            "ground_station_los": any_los,
+            "sufficient_fuel": True,
             "projected_mass_remaining_kg": round(projected_mass, 2),
         }
 
@@ -210,53 +269,31 @@ class ManeuverScheduler:
     # Auto-scheduling: Evasion + paired Recovery
     # ─────────────────────────────────────────────────────
 
-    def _project_state(self, r, v, dt_seconds):
-        """Propagate a state vector forward by dt_seconds."""
-        from backend.physics.propagator import propagate_single
-        result = propagate_single(
-            float(r[0]), float(r[1]), float(r[2]),
-            float(v[0]), float(v[1]), float(v[2]),
-            dt_seconds,
-            10.0
-        )
-        return np.array(result[:3]), np.array(result[3:])
-
-    def _plan_recovery_after_evasion(self, sat_id, evasion_cmd, nominal_r0, nominal_v0,
-                                     threat_tca_seconds):
-        """Plan a recovery burn to return satellite to nominal slot after evasion.
-
-        FIX over original: propagates the actual post-evasion state to recovery time
-        and computes a proper phasing burn to the propagated nominal slot.
-        """
-        # Time of evasion burn
+    def _plan_recovery_after_evasion(self, sat_id, evasion_cmd, nominal_r0, nominal_v0, threat_tca_seconds):
         evasion_dt = (evasion_cmd.burn_time - self.sm.timestamp).total_seconds()
 
-        # State just after evasion burn (propagate to burn time, apply dv)
         sat_r, sat_v = self.sm.get_state(sat_id)
         if evasion_dt > 0:
             sat_r, sat_v = self._project_state(sat_r, sat_v, evasion_dt)
         sat_v_post = sat_v + evasion_cmd.delta_v
 
-        # Recovery target time: after threat passes + cooldown + buffer
         recovery_delay_from_now = max(
             threat_tca_seconds + COOLDOWN_SECONDS + 60.0,
             evasion_dt + COOLDOWN_SECONDS + 60.0,
         )
         recovery_time = self.sm.timestamp + timedelta(seconds=recovery_delay_from_now)
 
-        # Propagate post-evasion sat to recovery time
         dt_to_recovery = recovery_delay_from_now - evasion_dt
         if dt_to_recovery > 0:
             sat_r_rec, sat_v_rec = self._project_state(sat_r, sat_v_post, dt_to_recovery)
         else:
             sat_r_rec, sat_v_rec = sat_r, sat_v_post
 
-        # Propagate nominal slot to same recovery time
         dt_slot = recovery_delay_from_now
         if dt_slot > 0:
-            nom_r_rec, nom_v_rec = self._project_state(nominal_r0, nominal_v0, dt_slot)
+            nom_r_rec, _ = self._project_state(nominal_r0, nominal_v0, dt_slot)
         else:
-            nom_r_rec = np.array(nominal_r0)
+            nom_r_rec = np.array(nominal_r0, dtype=float)
 
         recovery_dv = compute_recovery_dv(sat_r_rec, sat_v_rec, nom_r_rec)
 
@@ -270,37 +307,35 @@ class ManeuverScheduler:
         )
 
     def auto_schedule_evasion(self, cdm: dict) -> Optional[ManeuverCommand]:
-        """Automatically schedule an evasion burn for a critical CDM."""
-        sat_id      = cdm["sat_id"]
-        deb_id      = cdm["deb_id"]
-        tca_seconds = cdm["tca_seconds"]
+        sat_id = cdm["sat_id"]
+        deb_id = cdm["deb_id"]
+        tca_seconds = float(cdm["tca_seconds"])
 
-        # Duplicate prevention
+        if self.sm.is_cdm_handled(sat_id, deb_id):
+            return None
+
         pending = self.get_pending_for_satellite(sat_id)
         if any(c.burn_type == "EVASION" for c in pending):
             return None
 
         sat_r, sat_v = self.sm.get_state(sat_id)
         deb_r, deb_v = self.sm.get_state(deb_id)
-        ts_unix      = self.sm.timestamp.timestamp()
+        ts_unix = self.sm.timestamp.timestamp()
 
         has_los, _ = self.gn.has_los_any_station(sat_r, ts_unix)
         if has_los:
-            burn_time = self.sm.timestamp + timedelta(seconds=SIGNAL_DELAY + 1)
+            burn_time = self.sm.timestamp + timedelta(seconds=SIGNAL_DELAY + 5)
         else:
-            contact_wait, duration, station = self.gn.find_next_contact_window(
-                sat_r, sat_v, ts_unix
-            )
+            contact_wait, duration, station = self.gn.find_next_contact_window(sat_r, sat_v, ts_unix)
             if contact_wait is None:
                 return None
             if contact_wait + SIGNAL_DELAY >= tca_seconds:
                 return None
-            burn_time = self.sm.timestamp + timedelta(seconds=contact_wait + SIGNAL_DELAY + 1)
+            burn_time = self.sm.timestamp + timedelta(seconds=contact_wait + SIGNAL_DELAY + 5)
 
         dv_eci = compute_evasion_dv(sat_r, sat_v, deb_r, deb_v, tca_seconds)
-
         dv_mag = np.linalg.norm(dv_eci)
-        if dv_mag * 1000 > MAX_DELTA_V * 1000:
+        if dv_mag > MAX_DELTA_V and dv_mag > 0:
             dv_eci = dv_eci / dv_mag * MAX_DELTA_V
 
         evasion_cmd = ManeuverCommand(
@@ -316,7 +351,9 @@ class ManeuverScheduler:
         if not success:
             return None
 
-        # Plan and schedule recovery using proper propagation
+        handled_until = self.sm.timestamp + timedelta(seconds=max(tca_seconds + COOLDOWN_SECONDS + 300.0, 1800.0))
+        self.sm.mark_cdm_handled(sat_id, deb_id, handled_until, burn_id=evasion_cmd.burn_id)
+
         nominal_r = self.sm.nominal_slots.get(sat_id, sat_r)
         nominal_v = self.sm.nominal_slot_vels.get(sat_id, sat_v)
         recovery_cmd = self._plan_recovery_after_evasion(
@@ -325,7 +362,6 @@ class ManeuverScheduler:
 
         rec_success, _, _ = self.schedule(recovery_cmd)
         if not rec_success:
-            # Store deferred intent
             self.sm.objects[sat_id]["pending_recovery_intent"] = {
                 "nominal_r": nominal_r.tolist(),
                 "nominal_v": nominal_v.tolist(),
@@ -340,7 +376,6 @@ class ManeuverScheduler:
 
     def check_and_schedule_eol(self):
         eol_threshold_kg = EOL_FUEL_THRESHOLD * INITIAL_FUEL
-
         for sat_id in self.sm.sat_ids:
             fuel = self.sm.fuel.get(sat_id, 0)
             if fuel <= eol_threshold_kg and fuel > 0:
@@ -356,12 +391,12 @@ class ManeuverScheduler:
         r_mag = np.linalg.norm(sat_r)
         v_mag = np.linalg.norm(sat_v)
 
-        delta_a     = 25.0
+        delta_a = 25.0
         dv_magnitude = MU * delta_a / (2 * r_mag * r_mag * v_mag)
         dv_magnitude = min(dv_magnitude, MAX_DELTA_V * 0.5)
 
         v_hat = sat_v / v_mag
-        dv_eci    = v_hat * dv_magnitude
+        dv_eci = v_hat * dv_magnitude
         burn_time = self.sm.timestamp + timedelta(seconds=SIGNAL_DELAY + 30)
 
         cmd = ManeuverCommand(
@@ -379,7 +414,7 @@ class ManeuverScheduler:
 
     def execute_due_maneuvers(self, old_time: datetime, new_time: datetime) -> int:
         executed_count = 0
-        still_pending  = []
+        still_pending = []
 
         for cmd in self.queue:
             if cmd.status != "PENDING":
@@ -395,34 +430,31 @@ class ManeuverScheduler:
 
     def _execute_burn(self, cmd: ManeuverCommand):
         sat_id = cmd.sat_id
-        idx    = self.sm._id_to_idx[sat_id]
+        idx = self.sm._id_to_idx[sat_id]
 
-        # Apply ΔV (impulsive)
         self.sm.velocities[idx] += cmd.delta_v
 
-        # Tsiolkovsky fuel depletion
         fuel_used = compute_fuel_consumed(self.sm.masses[sat_id], cmd.delta_v_magnitude_ms)
-        self.sm.fuel[sat_id]   = max(0.0, self.sm.fuel[sat_id] - fuel_used)
+        self.sm.fuel[sat_id] = max(0.0, self.sm.fuel[sat_id] - fuel_used)
         self.sm.masses[sat_id] = max(self.sm.masses[sat_id] - fuel_used, 500.0)
 
         self.sm.last_burn_time[sat_id] = cmd.burn_time
         cmd.status = "EXECUTED"
         self.history.append(cmd)
 
-        # Increment evasion counter
-        if cmd.burn_type == "EVASION":
+        if cmd.burn_type == "EVASION" and cmd.linked_cdm:
             self.sm.total_collisions_avoided += 1
 
         self.sm.maneuver_log.append({
-            "timestamp":          cmd.burn_time.isoformat(),
-            "sat_id":             sat_id,
-            "burn_id":            cmd.burn_id,
-            "burn_type":          cmd.burn_type,
-            "delta_v_km_s":       cmd.delta_v.tolist(),
-            "delta_v_ms":         round(cmd.delta_v_magnitude_ms, 4),
-            "fuel_consumed_kg":   round(fuel_used, 4),
-            "fuel_remaining_kg":  round(self.sm.fuel[sat_id], 4),
-            "mass_remaining_kg":  round(self.sm.masses[sat_id], 4),
+            "timestamp": cmd.burn_time.isoformat(),
+            "sat_id": sat_id,
+            "burn_id": cmd.burn_id,
+            "burn_type": cmd.burn_type,
+            "delta_v_km_s": cmd.delta_v.tolist(),
+            "delta_v_ms": round(cmd.delta_v_magnitude_ms, 4),
+            "fuel_consumed_kg": round(fuel_used, 4),
+            "fuel_remaining_kg": round(self.sm.fuel[sat_id], 4),
+            "mass_remaining_kg": round(self.sm.masses[sat_id], 4),
         })
 
         from backend.utils.logger import logger as _log

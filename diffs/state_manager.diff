@@ -1,0 +1,566 @@
+--- /tmp/newproj/backend/engine/state_manager.py	2026-04-02 22:38:50.000000000 +0000
++++ /tmp/newproj_patched/backend/engine/state_manager.py	2026-04-03 00:05:34.534160518 +0000
+@@ -1,258 +1,305 @@
+-"""
+-Central state store for all satellites and debris.
+-Uses numpy arrays for vectorized operations.
+-
+-Handles BOTH data formats:
+-  - Dict: {"r": {"x": 1.0, "y": 2.0, "z": 3.0}}  (from JSON files)
+-  - List: {"r": [1.0, 2.0, 3.0]}                    (potential alt format)
+-  - Pydantic model_dump: {"r": {"x": 1.0, ...}}     (from API telemetry)
+-"""
+-import numpy as np
+-import json
+-from datetime import datetime, timezone, timedelta
+-from backend.config import (
+-    DRY_MASS, INITIAL_FUEL, INITIAL_WET_MASS, SLOT_TOLERANCE,
+-    TRACK_HISTORY_MINUTES, TRACK_SAMPLE_SECONDS, METRICS_SAMPLE_SECONDS,
+-)
+-
+-
+-def _extract_vec3(obj, key):
+-    """Safely extract a 3-vector from either dict or list format."""
+-    val = obj[key]
+-    if isinstance(val, dict):
+-        return [val["x"], val["y"], val["z"]]
+-    elif isinstance(val, (list, tuple)):
+-        return [val[0], val[1], val[2]]
+-    elif isinstance(val, np.ndarray):
+-        return val.tolist()
+-    else:
+-        raise ValueError(f"Cannot parse {key}: {type(val)} = {val}")
+-
+-
+-class StateManager:
+-    def __init__(self):
+-        self.timestamp = datetime(2026, 3, 12, 8, 0, 0, tzinfo=timezone.utc)
+-        self.objects = {}
+-        self.ids = []
+-        self.sat_ids = []
+-        self.deb_ids = []
+-        self.positions = np.zeros((0, 3))
+-        self.velocities = np.zeros((0, 3))
+-        self._id_to_idx = {}
+-        self.nominal_slots = {}
+-        self.nominal_slot_vels = {}
+-        self.fuel = {}
+-        self.masses = {}
+-        self.last_burn_time = {}
+-        self.active_cdms = []
+-        self.maneuver_log = []
+-        self.total_collisions_avoided = 0
+-
+-        # Extended state for richer frontend / scoring
+-        self.last_telemetry_time = None
+-        self.track_history = {}       # sat_id -> list[dict]
+-        self.metrics_history = []     # list[dict]
+-        self.conjunction_watchlist = []  # fast-access watchlist
+-        self.last_full_ca_time = None
+-        self.last_track_sample_time = None
+-        self.last_metrics_sample_time = None
+-
+-    # ─────────────────────────────────────────────────────────────────────────
+-
+-    def load_initial_data(self, sat_file, deb_file):
+-        with open(sat_file) as f:
+-            sats = json.load(f)
+-        with open(deb_file) as f:
+-            debs = json.load(f)
+-        all_objects = sats + debs
+-        n = len(all_objects)
+-        self.positions = np.zeros((n, 3))
+-        self.velocities = np.zeros((n, 3))
+-        self.ids = []
+-        self.sat_ids = []
+-        self.deb_ids = []
+-        self._id_to_idx = {}
+-        self.nominal_slots = {}
+-        self.nominal_slot_vels = {}
+-        self.fuel = {}
+-        self.masses = {}
+-        self.last_burn_time = {}
+-        self.track_history = {}
+-
+-        for i, obj in enumerate(all_objects):
+-            oid = obj["id"]
+-            self.ids.append(oid)
+-            self._id_to_idx[oid] = i
+-
+-            r = _extract_vec3(obj, "r")
+-            v = _extract_vec3(obj, "v")
+-            self.positions[i] = r
+-            self.velocities[i] = v
+-
+-            if obj.get("type", "DEBRIS") == "SATELLITE":
+-                self.sat_ids.append(oid)
+-                self.objects[oid] = {"type": "SATELLITE", "status": "NOMINAL", "drift_km": 0.0}
+-                self.fuel[oid] = obj.get("fuel_kg", INITIAL_FUEL)
+-                self.masses[oid] = obj.get("mass_kg", INITIAL_WET_MASS)
+-                self.last_burn_time[oid] = None
+-                self.track_history[oid] = []
+-
+-                if "nominal_slot" in obj:
+-                    ns = obj["nominal_slot"]
+-                    if isinstance(ns, dict):
+-                        self.nominal_slots[oid] = np.array([ns["x"], ns["y"], ns["z"]])
+-                    else:
+-                        self.nominal_slots[oid] = np.array(ns[:3])
+-                else:
+-                    self.nominal_slots[oid] = np.array(r)
+-
+-                self.nominal_slot_vels[oid] = np.array(v)
+-            else:
+-                self.deb_ids.append(oid)
+-                self.objects[oid] = {"type": "DEBRIS", "status": "ACTIVE"}
+-
+-        self.sample_tracks(force=True)
+-        self.sample_metrics(force=True)
+-
+-    # ─────────────────────────────────────────────────────────────────────────
+-
+-    def update_from_telemetry(self, timestamp_str, objects_list):
+-        """Update state from incoming telemetry.
+-
+-        FIX: telemetry cannot rewind simulation time.
+-        """
+-        telemetry_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+-        self.last_telemetry_time = telemetry_time
+-        if telemetry_time > self.timestamp:
+-            self.timestamp = telemetry_time
+-
+-        for obj in objects_list:
+-            oid = obj["id"]
+-            r = np.array(_extract_vec3(obj, "r"))
+-            v = np.array(_extract_vec3(obj, "v"))
+-
+-            if oid in self._id_to_idx:
+-                idx = self._id_to_idx[oid]
+-                self.positions[idx] = r
+-                self.velocities[idx] = v
+-            else:
+-                idx = len(self.ids)
+-                self.ids.append(oid)
+-                self._id_to_idx[oid] = idx
+-                self.positions = np.vstack([self.positions, r.reshape(1, 3)])
+-                self.velocities = np.vstack([self.velocities, v.reshape(1, 3)])
+-
+-                obj_type = obj.get("type", "DEBRIS")
+-                self.objects[oid] = {"type": obj_type, "status": "ACTIVE"}
+-
+-                if obj_type == "SATELLITE":
+-                    self.sat_ids.append(oid)
+-                    self.fuel[oid] = obj.get("fuel_kg", INITIAL_FUEL)
+-                    self.masses[oid] = obj.get("mass_kg", INITIAL_WET_MASS)
+-                    self.last_burn_time[oid] = None
+-                    self.nominal_slots[oid] = r.copy()
+-                    self.nominal_slot_vels[oid] = v.copy()
+-                    self.track_history[oid] = []
+-                else:
+-                    self.deb_ids.append(oid)
+-
+-    # ─────────────────────────────────────────────────────────────────────────
+-    # Track & metrics sampling (for frontend history)
+-    # ─────────────────────────────────────────────────────────────────────────
+-
+-    def sample_tracks(self, force=False):
+-        """Sample current lat/lon/alt for each satellite and store in history."""
+-        now = self.timestamp
+-        if not force and self.last_track_sample_time is not None:
+-            elapsed = (now - self.last_track_sample_time).total_seconds()
+-            if elapsed < TRACK_SAMPLE_SECONDS:
+-                return
+-
+-        from backend.physics.coordinates import eci_to_lla
+-        ts_unix = now.timestamp()
+-        max_samples = int(TRACK_HISTORY_MINUTES * 60 / TRACK_SAMPLE_SECONDS) + 5
+-
+-        for sid in self.sat_ids:
+-            if sid not in self._id_to_idx:
+-                continue
+-            idx = self._id_to_idx[sid]
+-            r = self.positions[idx]
+-            try:
+-                lat, lon, alt = eci_to_lla(r, ts_unix)
+-                if not (np.isfinite(lat) and np.isfinite(lon) and np.isfinite(alt)):
+-                    continue
+-                entry = {
+-                    "t": now.isoformat(),
+-                    "lat": round(float(lat), 3),
+-                    "lon": round(float(lon), 3),
+-                    "alt": round(float(alt), 1),
+-                }
+-                if sid not in self.track_history:
+-                    self.track_history[sid] = []
+-                self.track_history[sid].append(entry)
+-                # Trim to max_samples
+-                if len(self.track_history[sid]) > max_samples:
+-                    self.track_history[sid] = self.track_history[sid][-max_samples:]
+-            except Exception:
+-                pass
+-
+-        self.last_track_sample_time = now
+-
+-    def sample_metrics(self, force=False):
+-        """Append a fleet-wide metrics snapshot for frontend charting."""
+-        now = self.timestamp
+-        if not force and self.last_metrics_sample_time is not None:
+-            elapsed = (now - self.last_metrics_sample_time).total_seconds()
+-            if elapsed < METRICS_SAMPLE_SECONDS:
+-                return
+-
+-        fleet_fuel = float(sum(self.fuel.get(s, 0.0) for s in self.sat_ids))
+-        entry = {
+-            "t": now.isoformat(),
+-            "fleet_fuel_kg": round(fleet_fuel, 2),
+-            "collisions_avoided": int(self.total_collisions_avoided),
+-            "maneuvers_executed": int(len(self.maneuver_log)),
+-            "fleet_uptime": None,  # filled by station-keeping
+-        }
+-        self.metrics_history.append(entry)
+-        # Keep last 180 samples (~3 hours at 60s cadence)
+-        if len(self.metrics_history) > 180:
+-            self.metrics_history = self.metrics_history[-180:]
+-
+-        self.last_metrics_sample_time = now
+-
+-    def get_track_window(self, sat_id):
+-        """Return stored track history for a satellite."""
+-        return self.track_history.get(sat_id, [])
+-
+-    def set_watchlist(self, cdms):
+-        """Cache a fast-access watchlist from CDM list."""
+-        self.conjunction_watchlist = [
+-            c for c in cdms
+-            if c["risk_level"] in ("CRITICAL", "RED")
+-            or (c["risk_level"] == "YELLOW" and c["tca_seconds"] <= 3600.0)
+-            or c["miss_distance_km"] <= 10.0
+-        ]
+-
+-    # ─────────────────────────────────────────────────────────────────────────
+-    # Basic query helpers
+-    # ─────────────────────────────────────────────────────────────────────────
+-
+-    def get_satellite_indices(self):
+-        return [self._id_to_idx[sid] for sid in self.sat_ids if sid in self._id_to_idx]
+-
+-    def get_debris_indices(self):
+-        return [self._id_to_idx[did] for did in self.deb_ids if did in self._id_to_idx]
+-
+-    def get_state(self, obj_id):
+-        idx = self._id_to_idx[obj_id]
+-        return self.positions[idx].copy(), self.velocities[idx].copy()
+-
+-    def check_slot_status(self, sat_id):
+-        if sat_id not in self.nominal_slots:
+-            return "NOMINAL"
+-        idx = self._id_to_idx[sat_id]
+-        current_r = self.positions[idx]
+-        nominal_r = self.nominal_slots[sat_id]
+-        distance = np.linalg.norm(current_r - nominal_r)
+-        return "NOMINAL" if distance <= SLOT_TOLERANCE else "OUT_OF_SLOT"
++"""
++Central state store for all satellites and debris.
++Uses numpy arrays for vectorized operations.
++
++Handles BOTH data formats:
++  - Dict: {"r": {"x": 1.0, "y": 2.0, "z": 3.0}}  (from JSON files)
++  - List: {"r": [1.0, 2.0, 3.0]}                    (potential alt format)
++  - Pydantic model_dump: {"r": {"x": 1.0, ...}}     (from API telemetry)
++"""
++import numpy as np
++import json
++from datetime import datetime, timezone, timedelta
++from backend.config import (
++    DRY_MASS, INITIAL_FUEL, INITIAL_WET_MASS, SLOT_TOLERANCE,
++    TRACK_HISTORY_MINUTES, TRACK_SAMPLE_SECONDS, METRICS_SAMPLE_SECONDS,
++)
++
++
++def _extract_vec3(obj, key):
++    """Safely extract a 3-vector from either dict or list format."""
++    val = obj[key]
++    if isinstance(val, dict):
++        return [val["x"], val["y"], val["z"]]
++    elif isinstance(val, (list, tuple)):
++        return [val[0], val[1], val[2]]
++    elif isinstance(val, np.ndarray):
++        return val.tolist()
++    else:
++        raise ValueError(f"Cannot parse {key}: {type(val)} = {val}")
++
++
++class StateManager:
++    def __init__(self):
++        self.timestamp = datetime(2026, 3, 12, 8, 0, 0, tzinfo=timezone.utc)
++        self.objects = {}
++        self.ids = []
++        self.sat_ids = []
++        self.deb_ids = []
++        self.positions = np.zeros((0, 3))
++        self.velocities = np.zeros((0, 3))
++        self._id_to_idx = {}
++        self.nominal_slots = {}
++        self.nominal_slot_vels = {}
++        self.fuel = {}
++        self.masses = {}
++        self.last_burn_time = {}
++        self.active_cdms = []
++        self.maneuver_log = []
++        self.total_collisions_avoided = 0
++        self.acted_cdm_pairs = {}   # (sat_id, deb_id) -> metadata
++        self.collided_pairs = set() # {(sat_id, deb_id)} distinct physical collisions
++
++        # Extended state for richer frontend / scoring
++        self.last_telemetry_time = None
++        self.track_history = {}       # sat_id -> list[dict]
++        self.metrics_history = []     # list[dict]
++        self.conjunction_watchlist = []  # fast-access watchlist
++        self.last_full_ca_time = None
++        self.last_track_sample_time = None
++        self.last_metrics_sample_time = None
++
++    # ─────────────────────────────────────────────────────────────────────────
++
++    def load_initial_data(self, sat_file, deb_file):
++        with open(sat_file) as f:
++            sats = json.load(f)
++        with open(deb_file) as f:
++            debs = json.load(f)
++        all_objects = sats + debs
++        n = len(all_objects)
++        self.positions = np.zeros((n, 3))
++        self.velocities = np.zeros((n, 3))
++        self.ids = []
++        self.sat_ids = []
++        self.deb_ids = []
++        self._id_to_idx = {}
++        self.nominal_slots = {}
++        self.nominal_slot_vels = {}
++        self.fuel = {}
++        self.masses = {}
++        self.last_burn_time = {}
++        self.track_history = {}
++        self.acted_cdm_pairs = {}
++        self.collided_pairs = set()
++
++        for i, obj in enumerate(all_objects):
++            oid = obj["id"]
++            self.ids.append(oid)
++            self._id_to_idx[oid] = i
++
++            r = _extract_vec3(obj, "r")
++            v = _extract_vec3(obj, "v")
++            self.positions[i] = r
++            self.velocities[i] = v
++
++            if obj.get("type", "DEBRIS") == "SATELLITE":
++                self.sat_ids.append(oid)
++                self.objects[oid] = {"type": "SATELLITE", "status": "NOMINAL", "drift_km": 0.0}
++                self.fuel[oid] = obj.get("fuel_kg", INITIAL_FUEL)
++                self.masses[oid] = obj.get("mass_kg", INITIAL_WET_MASS)
++                self.last_burn_time[oid] = None
++                self.track_history[oid] = []
++
++                if "nominal_slot" in obj:
++                    ns = obj["nominal_slot"]
++                    if isinstance(ns, dict):
++                        self.nominal_slots[oid] = np.array([ns["x"], ns["y"], ns["z"]])
++                    else:
++                        self.nominal_slots[oid] = np.array(ns[:3])
++                else:
++                    self.nominal_slots[oid] = np.array(r)
++
++                self.nominal_slot_vels[oid] = np.array(v)
++            else:
++                self.deb_ids.append(oid)
++                self.objects[oid] = {"type": "DEBRIS", "status": "ACTIVE"}
++
++        self.sample_tracks(force=True)
++        self.sample_metrics(force=True)
++
++    # ─────────────────────────────────────────────────────────────────────────
++
++    def update_from_telemetry(self, timestamp_str, objects_list):
++        """Update state from incoming telemetry.
++
++        FIX: telemetry cannot rewind simulation time.
++        """
++        telemetry_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
++        self.last_telemetry_time = telemetry_time
++        if telemetry_time > self.timestamp:
++            self.timestamp = telemetry_time
++
++        for obj in objects_list:
++            oid = obj["id"]
++            r = np.array(_extract_vec3(obj, "r"))
++            v = np.array(_extract_vec3(obj, "v"))
++
++            if oid in self._id_to_idx:
++                idx = self._id_to_idx[oid]
++                self.positions[idx] = r
++                self.velocities[idx] = v
++            else:
++                idx = len(self.ids)
++                self.ids.append(oid)
++                self._id_to_idx[oid] = idx
++                self.positions = np.vstack([self.positions, r.reshape(1, 3)])
++                self.velocities = np.vstack([self.velocities, v.reshape(1, 3)])
++
++                obj_type = obj.get("type", "DEBRIS")
++                self.objects[oid] = {"type": obj_type, "status": "ACTIVE"}
++
++                if obj_type == "SATELLITE":
++                    self.sat_ids.append(oid)
++                    self.fuel[oid] = obj.get("fuel_kg", INITIAL_FUEL)
++                    self.masses[oid] = obj.get("mass_kg", INITIAL_WET_MASS)
++                    self.last_burn_time[oid] = None
++                    self.nominal_slots[oid] = r.copy()
++                    self.nominal_slot_vels[oid] = v.copy()
++                    self.track_history[oid] = []
++                else:
++                    self.deb_ids.append(oid)
++
++    # ─────────────────────────────────────────────────────────────────────────
++    # Track & metrics sampling (for frontend history)
++    # ─────────────────────────────────────────────────────────────────────────
++
++    def sample_tracks(self, force=False):
++        """Sample current lat/lon/alt for each satellite and store in history."""
++        now = self.timestamp
++        if not force and self.last_track_sample_time is not None:
++            elapsed = (now - self.last_track_sample_time).total_seconds()
++            if elapsed < TRACK_SAMPLE_SECONDS:
++                return
++
++        from backend.physics.coordinates import eci_to_lla
++        ts_unix = now.timestamp()
++        max_samples = int(TRACK_HISTORY_MINUTES * 60 / TRACK_SAMPLE_SECONDS) + 5
++
++        for sid in self.sat_ids:
++            if sid not in self._id_to_idx:
++                continue
++            idx = self._id_to_idx[sid]
++            r = self.positions[idx]
++            try:
++                lat, lon, alt = eci_to_lla(r, ts_unix)
++                if not (np.isfinite(lat) and np.isfinite(lon) and np.isfinite(alt)):
++                    continue
++                entry = {
++                    "t": now.isoformat(),
++                    "lat": round(float(lat), 3),
++                    "lon": round(float(lon), 3),
++                    "alt": round(float(alt), 1),
++                }
++                if sid not in self.track_history:
++                    self.track_history[sid] = []
++                self.track_history[sid].append(entry)
++                # Trim to max_samples
++                if len(self.track_history[sid]) > max_samples:
++                    self.track_history[sid] = self.track_history[sid][-max_samples:]
++            except Exception:
++                pass
++
++        self.last_track_sample_time = now
++
++    def sample_metrics(self, force=False):
++        """Append a fleet-wide metrics snapshot for frontend charting."""
++        now = self.timestamp
++        if not force and self.last_metrics_sample_time is not None:
++            elapsed = (now - self.last_metrics_sample_time).total_seconds()
++            if elapsed < METRICS_SAMPLE_SECONDS:
++                return
++
++        fleet_fuel = float(sum(self.fuel.get(s, 0.0) for s in self.sat_ids))
++        entry = {
++            "t": now.isoformat(),
++            "fleet_fuel_kg": round(fleet_fuel, 2),
++            "collisions_avoided": int(self.total_collisions_avoided),
++            "maneuvers_executed": int(len(self.maneuver_log)),
++            "fleet_uptime": None,  # filled by station-keeping
++        }
++        self.metrics_history.append(entry)
++        # Keep last 180 samples (~3 hours at 60s cadence)
++        if len(self.metrics_history) > 180:
++            self.metrics_history = self.metrics_history[-180:]
++
++        self.last_metrics_sample_time = now
++
++    def get_track_window(self, sat_id):
++        """Return stored track history for a satellite."""
++        return self.track_history.get(sat_id, [])
++
++    def set_watchlist(self, cdms):
++        """Cache a fast-access watchlist from CDM list."""
++        self.conjunction_watchlist = [
++            c for c in cdms
++            if c["risk_level"] in ("CRITICAL", "RED")
++            or (c["risk_level"] == "YELLOW" and c["tca_seconds"] <= 3600.0)
++            or c["miss_distance_km"] <= 10.0
++        ]
++
++    # ─────────────────────────────────────────────────────────────────────────
++    # Basic query helpers
++    # ─────────────────────────────────────────────────────────────────────────
++
++    def get_satellite_indices(self):
++        return [self._id_to_idx[sid] for sid in self.sat_ids if sid in self._id_to_idx]
++
++    def get_debris_indices(self):
++        return [self._id_to_idx[did] for did in self.deb_ids if did in self._id_to_idx]
++
++    def get_state(self, obj_id):
++        idx = self._id_to_idx[obj_id]
++        return self.positions[idx].copy(), self.velocities[idx].copy()
++
++    def check_slot_status(self, sat_id):
++        if sat_id not in self.nominal_slots:
++            return "NOMINAL"
++        idx = self._id_to_idx[sat_id]
++        current_r = self.positions[idx]
++        nominal_r = self.nominal_slots[sat_id]
++        distance = np.linalg.norm(current_r - nominal_r)
++        return "NOMINAL" if distance <= SLOT_TOLERANCE else "OUT_OF_SLOT"
++
++
++    def cdm_pair_key(self, sat_id, deb_id):
++        return tuple(sorted((sat_id, deb_id)))
++
++    def mark_cdm_handled(self, sat_id, deb_id, until_time, burn_id=None, reason="EVASION_SCHEDULED"):
++        key = self.cdm_pair_key(sat_id, deb_id)
++        self.acted_cdm_pairs[key] = {
++            "until": until_time,
++            "burn_id": burn_id,
++            "reason": reason,
++        }
++
++    def is_cdm_handled(self, sat_id, deb_id, now=None):
++        now = now or self.timestamp
++        key = self.cdm_pair_key(sat_id, deb_id)
++        meta = self.acted_cdm_pairs.get(key)
++        if meta is None:
++            return False
++        until = meta.get("until")
++        if until is not None and now >= until:
++            self.acted_cdm_pairs.pop(key, None)
++            return False
++        return True
++
++    def expire_handled_cdms(self, active_pairs=None, now=None):
++        now = now or self.timestamp
++        active_pairs = set(active_pairs or [])
++        drop = []
++        for key, meta in self.acted_cdm_pairs.items():
++            until = meta.get("until")
++            if until is not None and now >= until:
++                drop.append(key)
++            elif active_pairs and key not in active_pairs and until is not None and (until - now).total_seconds() > 900.0:
++                drop.append(key)
++        for key in drop:
++            self.acted_cdm_pairs.pop(key, None)
++
++    def has_pair_collided(self, sat_id, deb_id):
++        return self.cdm_pair_key(sat_id, deb_id) in self.collided_pairs
++
++    def mark_pair_collided(self, sat_id, deb_id):
++        self.collided_pairs.add(self.cdm_pair_key(sat_id, deb_id))

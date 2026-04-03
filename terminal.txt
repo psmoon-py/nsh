@@ -1,0 +1,391 @@
+(venv) PS E:\nsh-2026-acm> python -m scripts.test_collision_scenario
+========================================================================
+ PROJECT AETHER — Dynamically Collisional Scenario Test
+========================================================================
+Target satellite: SATELLITE-GEN-001
+Initial fuel: 50.000 kg
+
+Constructed dynamic collision case:
+  Debris id: DEB-DYN-COLLIDER-001
+  Basis: radial
+  Initial offset: 20.00 km
+  Predicted TCA: 600.0 s
+  Predicted miss without evasion: 0.000000 km
+  Relative speed at TCA: 0.02986 km/s
+
+Telemetry ACK:
+{
+  "status": "ACK",
+  "processed_count": 1,
+  "active_cdm_warnings": 1
+}
+
+Post-ingest status:
+  Active CDMs: 1
+  Maneuver queue entries for SATELLITE-GEN-001: 2
+  CDM: CRITICAL | TCA=600.1s | miss=0.003333 km
+
+Advancing 25 steps of 30s each...
+  Step 001: executed 1 maneuver(s)
+
+Final status:
+  Total maneuvers executed: 1
+  Total collisions detected: 0
+  Fuel used: 0.190000 kg
+  Final satellite status: NOMINAL
+
+✅ PASS: dynamic collision case detected, avoided, and logged correctly
+(venv) PS E:\nsh-2026-acm> pytest -q tests/test_collision_scenario_regression.py
+.                                                                                                                                                                        [100%]
+1 passed in 21.46s
+(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py --mode fixture --in-process
+{"timestamp": "2026-04-03T00:36:06.827046+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T00:36:08.312310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.313310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.313310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.315672+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 25, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
+{"timestamp": "2026-04-03T00:36:08.858875+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.859876+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.860890+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:08.861890+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 25, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
+{"timestamp": "2026-04-03T00:36:10.158250+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 600.1, "miss_distance_km": 0.0027, "risk_level": "CRITICAL"}
+{"timestamp": "2026-04-03T00:36:10.243609+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:10.245689+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:10.247703+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:10.248681+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 4, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
+{"timestamp": "2026-04-03T00:36:10.534347+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:00:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.628210+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:01:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.744082+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:01:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.824429+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:02:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.894427+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:02:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.923983+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:03:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.950063+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:03:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.970062+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:04:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:10.990597+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:04:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.106234+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 300.0, "miss_distance_km": 0.0003, "risk_level": "CRITICAL"}
+{"timestamp": "2026-04-03T00:36:11.161894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1099.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.162894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1132.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.162894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1103.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.163908+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:05:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.177914+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:05:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.200008+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:06:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.219084+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:06:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.237081+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:07:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.256076+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:07:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.277081+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:08:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.306103+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:08:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.331233+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:09:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.355164+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:09:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.371720+00:00", "level": "ERROR", "event": "COLLISION", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "distance_km": 0.0981}
+{"timestamp": "2026-04-03T00:36:11.492234+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 0.0, "miss_distance_km": 0.0003, "risk_level": "CRITICAL"}
+{"timestamp": "2026-04-03T00:36:11.543961+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 798.3, "miss_distance_km": 4.504, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.544958+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 832.5, "miss_distance_km": 4.5724, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.546978+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 803.6, "miss_distance_km": 4.6635, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.547967+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:10:00+00:00", "collisions": 1, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.573962+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:10:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.601073+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:11:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.630148+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:11:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.652152+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:12:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.677987+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:12:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.704114+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:13:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
+{"timestamp": "2026-04-03T00:36:11.915006+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 618.7, "miss_distance_km": 4.5038, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.916001+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 652.2, "miss_distance_km": 4.5723, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.916001+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 623.5, "miss_distance_km": 4.6633, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:11.917007+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
+{"timestamp": "2026-04-03T00:36:12.056607+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:13:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.080606+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:14:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.110646+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:14:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.149797+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:15:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.181375+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:15:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.213187+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:16:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.248319+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:16:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.290320+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:17:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.379234+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:17:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.455405+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 318.4, "miss_distance_km": 4.5039, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.456406+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 352.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.457403+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 323.5, "miss_distance_km": 4.6634, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.458413+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:18:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.488301+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:18:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.525968+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:19:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.557361+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:19:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.587703+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:20:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.611718+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:20:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.655417+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:21:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.688966+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:21:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.717977+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:22:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.743065+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:22:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.844291+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 19.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.846285+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 52.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.846285+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 23.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T00:36:12.847698+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:23:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.871324+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:23:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.893320+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:24:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.917342+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:24:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.937884+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:25:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.958924+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:25:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{"timestamp": "2026-04-03T00:36:12.978336+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:26:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
+{
+  "summary": {
+    "mode": "fixture",
+    "epoch": "2026-03-28T12:00:00.000Z",
+    "satellites_loaded": 5,
+    "debris_loaded": 20,
+    "snapshot_satellites": 5,
+    "snapshot_debris": 20,
+    "backend_cdm_count": 3,
+    "oracle_pairs_scanned": 0,
+    "oracle_positive_count": 0,
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "seeded_cases_run": 2,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 1,
+    "wall_clock_seconds": 10.10473918914795
+  },
+  "oracle": {
+    "telemetry_response": {
+      "status": "ACK",
+      "processed_count": 25,
+      "active_cdm_warnings": 3
+    },
+    "snapshot_satellites": 5,
+    "snapshot_debris": 20,
+    "backend_cdm_count": 3,
+    "oracle_pairs_scanned": 0,
+    "oracle_positive_count": 0,
+    "oracle_positive_pairs": [],
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "median_tca_error_s": null,
+    "median_miss_error_km": null
+  },
+  "seeded": {
+    "cases": [
+      {
+        "sat_id": "SAT-FIX-001",
+        "deb_id": "DEB-VAL-COLL-001",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 3.970910528681311e-12,
+        "initial_relative_speed_kms": 0.029711587199091172,
+        "initial_cdm_seen": true,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": null,
+          "contact_wait_seconds": null,
+          "contact_duration_seconds": null
+        },
+        "maneuvers_executed": 0,
+        "collisions_detected": 1
+      },
+      {
+        "sat_id": "SAT-FIX-002",
+        "deb_id": "DEB-VAL-COLL-002",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 8.922787342429993e-12,
+        "initial_relative_speed_kms": 0.02984215178569893,
+        "initial_cdm_seen": false,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": "GS-005",
+          "contact_wait_seconds": 1260,
+          "contact_duration_seconds": 510
+        },
+        "maneuvers_executed": 0,
+        "collisions_detected": 0
+      }
+    ],
+    "seeded_cases_run": 2,
+    "seeded_cases_feasible": 0,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 1
+  }
+}
+(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py `  
+>>   --mode local-files `
+>>   --sat-file "E:\nsh-2026-acm\starlink.tle" `
+>>   --debris-file "E:\nsh-2026-acm\debris.tle" `
+>>   --api-base http://localhost:8000 `
+>>   --report-json real_data_report.json
+{
+  "summary": {
+    "mode": "local-files",
+    "epoch": "2026-03-28T12:00:00.000Z",
+    "satellites_loaded": 20,
+    "debris_loaded": 500,
+    "snapshot_satellites": 20,
+    "snapshot_debris": 500,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "seeded_cases_run": 2,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 5,
+    "wall_clock_seconds": 137.14632201194763
+  },
+  "oracle": {
+    "telemetry_response": {
+      "status": "ACK",
+      "processed_count": 520,
+      "active_cdm_warnings": 0
+    },
+    "snapshot_satellites": 20,
+    "snapshot_debris": 500,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_positive_pairs": [],
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "median_tca_error_s": null,
+    "median_miss_error_km": null,
+    "backend_pairs": []
+  },
+  "seeded": {
+    "cases": [
+      {
+        "sat_id": "SAT-REAL-001",
+        "deb_id": "DEB-VAL-COLL-001",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 1.0725194820289065e-12,
+        "initial_relative_speed_kms": 0.02974243554406868,
+        "initial_cdm_seen": true,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": "GS-004",
+          "contact_wait_seconds": 3540,
+          "contact_duration_seconds": 150
+        },
+        "maneuvers_executed": 0,
+        "collisions_detected": 5
+      },
+      {
+        "sat_id": "SAT-REAL-002",
+        "deb_id": "DEB-VAL-COLL-002",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 1.0725194820289065e-12,
+        "initial_relative_speed_kms": 0.02974243554406868,
+        "initial_cdm_seen": false,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": "GS-004",
+          "contact_wait_seconds": 3540,
+          "contact_duration_seconds": 150
+        },
+        "maneuvers_executed": 0,
+        "collisions_detected": 0
+      }
+    ],
+    "seeded_cases_run": 2,
+    "seeded_cases_feasible": 0,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 0,
+    "seeded_total_maneuvers": 0,
+    "seeded_total_collisions": 5
+  }
+}
+
+Wrote report to real_data_report.json
+(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py `  
+>>   --mode live `
+>>   --sat-limit 25 `
+>>   --debris-limit 500 `      
+>>   --oracle-sats 5 `
+>>   --oracle-debris 120 `
+>>   --oracle-pairs-per-sat 8 `
+>>   --report-json live_data_report.json
+{
+  "summary": {
+    "mode": "live",
+    "epoch": "2026-03-28T12:00:00.000Z",
+    "satellites_loaded": 25,
+    "debris_loaded": 500,
+    "snapshot_satellites": 25,
+    "snapshot_debris": 500,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "seeded_cases_run": 2,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 1,
+    "seeded_total_maneuvers": 2,
+    "seeded_total_collisions": 0,
+    "wall_clock_seconds": 145.33253526687622
+  },
+  "oracle": {
+    "telemetry_response": {
+      "status": "ACK",
+      "processed_count": 525,
+      "active_cdm_warnings": 0
+    },
+    "snapshot_satellites": 25,
+    "snapshot_debris": 500,
+    "backend_cdm_count": 0,
+    "oracle_pairs_scanned": 40,
+    "oracle_positive_count": 0,
+    "oracle_positive_pairs": [],
+    "oracle_recall": null,
+    "matched_oracle_pairs": 0,
+    "median_tca_error_s": null,
+    "median_miss_error_km": null,
+    "backend_pairs": []
+  },
+  "seeded": {
+    "cases": [
+      {
+        "sat_id": "SAT-REAL-001",
+        "deb_id": "DEB-VAL-COLL-001",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 7.554830392944564e-12,
+        "initial_relative_speed_kms": 0.0297830569349142,
+        "initial_cdm_seen": true,
+        "contact_feasible_under_ps": true,
+        "feasibility": {
+          "has_los_now": true,
+          "upload_station_id": "GS-001",
+          "contact_wait_seconds": 0.0
+        },
+        "maneuvers_executed": 1,
+        "collisions_detected": 0
+      },
+      {
+        "sat_id": "SAT-REAL-002",
+        "deb_id": "DEB-VAL-COLL-002",
+        "target_tca_seconds": 600.0,
+        "initial_miss_km": 1.0664770706679132e-11,
+        "initial_relative_speed_kms": 0.02978736800041055,
+        "initial_cdm_seen": false,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": "GS-003",
+          "contact_wait_seconds": 1020,
+          "contact_duration_seconds": 360
+        },
+        "maneuvers_executed": 1,
+        "collisions_detected": 0
+      }
+    ],
+    "seeded_cases_run": 2,
+    "seeded_cases_feasible": 1,
+    "seeded_cases_with_initial_cdm": 1,
+    "seeded_cases_avoided": 1,
+    "seeded_total_maneuvers": 2,
+    "seeded_total_collisions": 0
+  }
+}
+
+Wrote report to live_data_report.json

@@ -4,8 +4,8 @@
     "epoch": "2026-03-28T12:00:00.000Z",
     "satellites_loaded": 25,
     "debris_loaded": 500,
-    "snapshot_satellites": 125,
-    "snapshot_debris": 10000,
+    "snapshot_satellites": 25,
+    "snapshot_debris": 500,
     "backend_cdm_count": 0,
     "oracle_pairs_scanned": 40,
     "oracle_positive_count": 0,
@@ -14,9 +14,9 @@
     "seeded_cases_run": 2,
     "seeded_cases_with_initial_cdm": 1,
     "seeded_cases_avoided": 1,
-    "seeded_total_maneuvers": 10,
-    "seeded_total_collisions": 3,
-    "wall_clock_seconds": 173.31896471977234
+    "seeded_total_maneuvers": 2,
+    "seeded_total_collisions": 0,
+    "wall_clock_seconds": 145.33253526687622
   },
   "oracle": {
     "telemetry_response": {
@@ -24,8 +24,8 @@
       "processed_count": 525,
       "active_cdm_warnings": 0
     },
-    "snapshot_satellites": 125,
-    "snapshot_debris": 10000,
+    "snapshot_satellites": 25,
+    "snapshot_debris": 500,
     "backend_cdm_count": 0,
     "oracle_pairs_scanned": 40,
     "oracle_positive_count": 0,
@@ -39,30 +39,44 @@
   "seeded": {
     "cases": [
       {
-        "sat_id": "SATELLITE-GEN-001",
+        "sat_id": "SAT-REAL-001",
         "deb_id": "DEB-VAL-COLL-001",
         "target_tca_seconds": 600.0,
-        "initial_miss_km": 1.625045877991e-11,
-        "initial_relative_speed_kms": 0.029857080045110354,
+        "initial_miss_km": 7.554830392944564e-12,
+        "initial_relative_speed_kms": 0.0297830569349142,
         "initial_cdm_seen": true,
-        "maneuvers_executed": 6,
-        "collisions_detected": 3
+        "contact_feasible_under_ps": true,
+        "feasibility": {
+          "has_los_now": true,
+          "upload_station_id": "GS-001",
+          "contact_wait_seconds": 0.0
+        },
+        "maneuvers_executed": 1,
+        "collisions_detected": 0
       },
       {
-        "sat_id": "SATELLITE-GEN-002",
+        "sat_id": "SAT-REAL-002",
         "deb_id": "DEB-VAL-COLL-002",
         "target_tca_seconds": 600.0,
-        "initial_miss_km": 7.1937811387926445e-12,
-        "initial_relative_speed_kms": 0.029855467235098663,
+        "initial_miss_km": 1.0664770706679132e-11,
+        "initial_relative_speed_kms": 0.02978736800041055,
         "initial_cdm_seen": false,
-        "maneuvers_executed": 4,
+        "contact_feasible_under_ps": false,
+        "feasibility": {
+          "has_los_now": false,
+          "upload_station_id": "GS-003",
+          "contact_wait_seconds": 1020,
+          "contact_duration_seconds": 360
+        },
+        "maneuvers_executed": 1,
         "collisions_detected": 0
       }
     ],
     "seeded_cases_run": 2,
+    "seeded_cases_feasible": 1,
     "seeded_cases_with_initial_cdm": 1,
     "seeded_cases_avoided": 1,
-    "seeded_total_maneuvers": 10,
-    "seeded_total_collisions": 3
+    "seeded_total_maneuvers": 2,
+    "seeded_total_collisions": 0
   }
 }

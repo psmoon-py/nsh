@@ -59,24 +59,43 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
-sm        = StateManager()
-cd        = ConjunctionDetector(sm)
-gn        = GroundStationNetwork()
-scheduler = ManeuverScheduler(sm, gn)
-sk        = StationKeepingManager(sm, scheduler)
-
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 gs_csv   = os.path.join(DATA_DIR, "ground_stations.csv")
-if os.path.exists(gs_csv):
-    gn.load_from_csv(gs_csv)
-else:
-    gn.load_defaults()
-
 sat_file = os.path.join(DATA_DIR, "satellites_init.json")
 deb_file = os.path.join(DATA_DIR, "debris_init.json")
-if os.path.exists(sat_file) and os.path.exists(deb_file):
-    sm.load_initial_data(sat_file, deb_file)
-    logger.telemetry_ingested(len(sm.ids), 0, sm.timestamp.isoformat())
+
+
+def _initialize_system(load_defaults: bool = True):
+    sm = StateManager()
+    cd = ConjunctionDetector(sm)
+    gn = GroundStationNetwork()
+    scheduler = ManeuverScheduler(sm, gn)
+    sk = StationKeepingManager(sm, scheduler)
+
+    if os.path.exists(gs_csv):
+        gn.load_from_csv(gs_csv)
+    else:
+        gn.load_defaults()
+
+    if load_defaults and os.path.exists(sat_file) and os.path.exists(deb_file):
+        sm.load_initial_data(sat_file, deb_file)
+        logger.telemetry_ingested(len(sm.ids), 0, sm.timestamp.isoformat())
+
+    return sm, cd, gn, scheduler, sk
+
+
+def reset_world(load_defaults: bool = False):
+    global sm, cd, gn, scheduler, sk
+    sm, cd, gn, scheduler, sk = _initialize_system(load_defaults=load_defaults)
+    return {
+        "status": "RESET",
+        "load_defaults": bool(load_defaults),
+        "satellites": len(sm.sat_ids),
+        "debris": len(sm.deb_ids),
+    }
+
+
+sm, cd, gn, scheduler, sk = _initialize_system(load_defaults=True)
 
 
 # ──────────────────────────────────────────────────────────
@@ -87,33 +106,44 @@ def _run_conjunction_and_evasion(force=False):
     """Run conjunction assessment and auto-schedule evasions.
 
     Throttled by FULL_CA_REFRESH_SECONDS unless force=True.
+    Also suppresses duplicate actions for already-handled CDM pairs.
     """
     now = sm.timestamp
     if (not force and sm.last_full_ca_time is not None
             and (now - sm.last_full_ca_time).total_seconds() < FULL_CA_REFRESH_SECONDS):
-        return sm.active_cdms  # Return cached
+        return sm.active_cdms
 
     cdm_warnings = cd.run_full_assessment()
-    sm.active_cdms      = cdm_warnings
+    sm.active_cdms = cdm_warnings
     sm.last_full_ca_time = now
+
+    active_pairs = {sm.cdm_pair_key(c["sat_id"], c["deb_id"]) for c in cdm_warnings}
+    sm.expire_handled_cdms(active_pairs=active_pairs, now=now)
 
     for cdm in cdm_warnings:
         logger.conjunction_detected(
             cdm["sat_id"], cdm["deb_id"],
             cdm["tca_seconds"], cdm["miss_distance_km"], cdm["risk_level"],
         )
-        if cdm["risk_level"] in ("CRITICAL", "RED"):
-            sat_id  = cdm["sat_id"]
-            pending = scheduler.get_pending_for_satellite(sat_id)
-            if any(c.burn_type == "EVASION" for c in pending):
-                continue
-            evasion_cmd = scheduler.auto_schedule_evasion(cdm)
-            if evasion_cmd:
-                logger.maneuver_scheduled(
-                    evasion_cmd.sat_id, evasion_cmd.burn_id,
-                    evasion_cmd.burn_type, evasion_cmd.delta_v_magnitude_ms,
-                    evasion_cmd.burn_time,
-                )
+        if cdm["risk_level"] not in ("CRITICAL", "RED"):
+            continue
+
+        sat_id = cdm["sat_id"]
+        deb_id = cdm["deb_id"]
+        if sm.is_cdm_handled(sat_id, deb_id, now=now):
+            continue
+
+        pending = scheduler.get_pending_for_satellite(sat_id)
+        if any(c.burn_type == "EVASION" for c in pending):
+            continue
+
+        evasion_cmd = scheduler.auto_schedule_evasion(cdm)
+        if evasion_cmd:
+            logger.maneuver_scheduled(
+                evasion_cmd.sat_id, evasion_cmd.burn_id,
+                evasion_cmd.burn_type, evasion_cmd.delta_v_magnitude_ms,
+                evasion_cmd.burn_time,
+            )
 
     scheduler.check_and_schedule_eol()
     return cdm_warnings
@@ -147,32 +177,38 @@ def _propagate_nominal_slots(dt_seconds: float):
 
 
 def _check_collisions() -> int:
-    """Check for actual collisions (miss distance < 100m) at current positions."""
+    """Check for actual collisions at current positions.
+
+    Counts each physical sat-debris collision pair only once across the full run.
+    """
     sat_indices = sm.get_satellite_indices()
     deb_indices = sm.get_debris_indices()
     if not sat_indices or not deb_indices:
         return 0
     from scipy.spatial import KDTree
     deb_pos = sm.positions[deb_indices]
-    tree     = KDTree(deb_pos)
+    tree = KDTree(deb_pos)
     collisions = 0
     for si in sat_indices:
+        sat_id = sm.ids[si]
         nearby = tree.query_ball_point(sm.positions[si], r=COLLISION_THRESHOLD)
-        if nearby:
-            collisions += len(nearby)
-            for j in nearby:
-                deb_idx = deb_indices[j]
-                dist = float(np.linalg.norm(sm.positions[si] - sm.positions[deb_idx]))
-                logger.collision_detected(sm.ids[si], sm.ids[deb_idx], dist)
+        for j in nearby:
+            deb_idx = deb_indices[j]
+            deb_id = sm.ids[deb_idx]
+            if sm.has_pair_collided(sat_id, deb_id):
+                continue
+            dist = float(np.linalg.norm(sm.positions[si] - sm.positions[deb_idx]))
+            if dist < COLLISION_THRESHOLD:
+                sm.mark_pair_collided(sat_id, deb_id)
+                collisions += 1
+                logger.collision_detected(sat_id, deb_id, dist)
     return collisions
 
 
 def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
     """Refined mid-interval collision check using the active watchlist.
 
-    Uses a linear TCA estimate inside the current interval to decide whether a
-    pair deserves fine propagation. This is much safer than sampling only the
-    start of the interval and much cheaper than refining every pair blindly.
+    Counts each distinct pair only once across the whole run.
     """
     if not sm.conjunction_watchlist or dt_seconds <= 0:
         return 0
@@ -184,7 +220,7 @@ def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
         sat_id = cdm["sat_id"]
         deb_id = cdm["deb_id"]
         pair_key = tuple(sorted((sat_id, deb_id)))
-        if pair_key in seen_pairs:
+        if pair_key in seen_pairs or sm.has_pair_collided(sat_id, deb_id):
             continue
         seen_pairs.add(pair_key)
 
@@ -214,6 +250,7 @@ def _check_interval_collisions_watchlist(dt_seconds: float) -> int:
         for step_idx in range(n_samples + 1):
             dist = float(np.sqrt((sx-dx)**2 + (sy-dy)**2 + (sz-dz)**2))
             if dist < COLLISION_THRESHOLD:
+                sm.mark_pair_collided(sat_id, deb_id)
                 collisions += 1
                 logger.collision_detected(sat_id, deb_id, dist)
                 break
@@ -482,6 +519,12 @@ async def get_snapshot():
         "total_maneuvers_executed": len(scheduler.history),
         "total_collisions_avoided": int(sm.total_collisions_avoided),
     }
+
+
+@app.post("/api/admin/reset_world")
+async def admin_reset_world(data: dict | None = None):
+    load_defaults = True if data is None else bool(data.get("load_defaults", True))
+    return reset_world(load_defaults=load_defaults)
 
 
 # ══════════════════════════════════════════════════════════

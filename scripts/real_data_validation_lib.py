@@ -13,6 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+SIGNAL_DELAY = 10.0
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -71,6 +73,12 @@ class LiveAPIClient:
     def __init__(self, api_base: str) -> None:
         self.api_base = api_base.rstrip("/")
 
+    def reset_world(self, load_defaults: bool = False) -> Optional[Dict[str, Any]]:
+        try:
+            return self.post_json("/api/admin/reset_world", {"load_defaults": load_defaults})
+        except Exception:
+            return None
+
     def get_json(self, path: str) -> Dict[str, Any]:
         url = self.api_base + path
         with urllib.request.urlopen(url, timeout=60) as resp:
@@ -92,9 +100,13 @@ class LiveAPIClient:
 class InProcessAPIClient:
     def __init__(self) -> None:
         from fastapi.testclient import TestClient  # local import so scripts still work without pytest
-        from backend.main import app
+        from backend.main import app, reset_world
 
         self.client = TestClient(app)
+        self._reset_world = reset_world
+
+    def reset_world(self, load_defaults: bool = False) -> Dict[str, Any]:
+        return self._reset_world(load_defaults=load_defaults)
 
     def get_json(self, path: str) -> Dict[str, Any]:
         resp = self.client.get(path)
@@ -446,6 +458,47 @@ def compare_backend_to_oracle(
     }
 
 
+def _load_validation_ground_network():
+    from backend.engine.ground_stations import GroundStationNetwork
+    gn = GroundStationNetwork()
+    csv_path = REPO_ROOT / "backend" / "data" / "ground_stations.csv"
+    if csv_path.exists():
+        gn.load_from_csv(str(csv_path))
+    else:
+        gn.load_defaults()
+    return gn
+
+
+def _sat_rv_from_snapshot_entry(entry: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray]:
+    r = entry.get("r", {})
+    v = entry.get("v", {})
+    return (
+        np.array([float(r.get("x", 0.0)), float(r.get("y", 0.0)), float(r.get("z", 0.0))], dtype=float),
+        np.array([float(v.get("x", 0.0)), float(v.get("y", 0.0)), float(v.get("z", 0.0))], dtype=float),
+    )
+
+
+def _is_seeded_case_contact_feasible(gn, sat_entry: Dict[str, Any], now_dt: datetime, tca_seconds: float) -> Tuple[bool, Dict[str, Any]]:
+    sat_r, sat_v = _sat_rv_from_snapshot_entry(sat_entry)
+    ts_unix = now_dt.timestamp()
+    has_los, visible = gn.has_los_any_station(sat_r, ts_unix)
+    if has_los:
+        return SIGNAL_DELAY < tca_seconds, {
+            "has_los_now": True,
+            "upload_station_id": visible[0] if visible else None,
+            "contact_wait_seconds": 0.0,
+        }
+
+    contact_wait, duration, station = gn.find_next_contact_window(sat_r, sat_v, ts_unix, max_wait=max(7200, int(tca_seconds) + 1200))
+    feasible = contact_wait is not None and (contact_wait + SIGNAL_DELAY) < tca_seconds
+    return feasible, {
+        "has_los_now": False,
+        "upload_station_id": station,
+        "contact_wait_seconds": contact_wait,
+        "contact_duration_seconds": duration,
+    }
+
+
 def run_seeded_collision_campaign(
     client: Any,
     cases_to_run: int = 2,
@@ -459,14 +512,22 @@ def run_seeded_collision_campaign(
     if not satellites:
         raise RuntimeError("No satellites available in snapshot for seeded collision campaign")
 
+    gn = _load_validation_ground_network()
+    now_dt = parse_iso_z(snapshot["timestamp"])
+
     cases = []
     collisions = 0
     maneuvers = 0
     cases_with_initial_cdm = 0
     cases_avoided = 0
+    cases_feasible = 0
 
     for idx, sat in enumerate(satellites[:cases_to_run], start=1):
         case = build_dynamic_collision_case(sat, deb_id=f"DEB-VAL-COLL-{idx:03d}")
+        feasible, feasibility_meta = _is_seeded_case_contact_feasible(gn, sat, now_dt, case.tca_seconds)
+        if feasible:
+            cases_feasible += 1
+
         inject_payload = {
             "timestamp": snapshot["timestamp"],
             "objects": [case.telemetry_object()],
@@ -490,7 +551,7 @@ def run_seeded_collision_campaign(
 
         collisions += local_collisions
         maneuvers += local_maneuvers
-        if local_collisions == 0 and local_maneuvers >= 1:
+        if feasible and local_collisions == 0 and local_maneuvers >= 1:
             cases_avoided += 1
 
         cases.append({
@@ -500,6 +561,8 @@ def run_seeded_collision_campaign(
             "initial_miss_km": case.miss_distance_km,
             "initial_relative_speed_kms": case.relative_speed_kms,
             "initial_cdm_seen": bool(initial_cdms),
+            "contact_feasible_under_ps": bool(feasible),
+            "feasibility": feasibility_meta,
             "maneuvers_executed": local_maneuvers,
             "collisions_detected": local_collisions,
         })
@@ -507,6 +570,7 @@ def run_seeded_collision_campaign(
     return {
         "cases": cases,
         "seeded_cases_run": len(cases),
+        "seeded_cases_feasible": cases_feasible,
         "seeded_cases_with_initial_cdm": cases_with_initial_cdm,
         "seeded_cases_avoided": cases_avoided,
         "seeded_total_maneuvers": maneuvers,
@@ -542,6 +606,7 @@ def run_validation_suite(
     started = time.time()
     epoch_dt = parse_iso_z(epoch_str)
     client = InProcessAPIClient() if in_process else LiveAPIClient(api_base)
+    client.reset_world(load_defaults=False)
 
     if mode == "fixture":
         sat_tles = load_fixture_satellite_tles()
@@ -600,6 +665,12 @@ def run_validation_suite(
         dataset_counts = {"satellites_loaded": len(sat_map), "debris_loaded": len(deb_map)}
     else:
         raise ValueError(f"Unknown mode: {mode}")
+
+    client.reset_world(load_defaults=False)
+    if mode == "fixture":
+        client.post_json("/api/telemetry", payload)
+    else:
+        client.post_json("/api/telemetry", payload)
 
     seeded_block = run_seeded_collision_campaign(
         client,
