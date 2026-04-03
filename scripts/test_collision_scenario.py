@@ -9,11 +9,19 @@ from __future__ import annotations
 import json
 import math
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 import requests
 
-from scripts.collision_case_builder import build_dynamic_collision_case
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from scripts.collision_case_builder import build_dynamic_collision_case
+except ModuleNotFoundError:
+    from collision_case_builder import build_dynamic_collision_case
 
 API = "http://localhost:8000"
 

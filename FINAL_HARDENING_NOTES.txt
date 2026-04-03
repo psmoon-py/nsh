@@ -1,0 +1,30 @@
+This patch bundle fixes the repo/test-harness issues called out in the last review.
+
+Included fixes
+1. Added scripts/__init__.py so script imports work consistently in pytest and direct execution.
+2. Added pytest.ini so pytest only collects real tests from tests/ instead of importing live scripts as tests.
+3. Patched scripts/test_collision_scenario.py so direct execution no longer fails with ModuleNotFoundError.
+4. Reworked tests/test_snapshot_contract.py to run in-process with TestClient and inject a real CDM case, so it no longer depends on an external backend process and no longer skips.
+5. Reworked tests/test_real_data_validation_suite.py so fixture-mode smoke validation can run without skipping just because sgp4 is unavailable in the environment.
+6. Patched scripts/real_data_validation_lib.py so fixture mode can fall back to deterministic default satellite states when sgp4 is unavailable, while keeping sgp4 required for live/local-file oracle modes.
+7. Added tests/test_exceptional_cases_matrix.py with stronger exceptional-case coverage:
+   - future-contact upload accepted before deadline
+   - future-contact upload rejected after deadline
+   - cooldown conflict rejected
+   - step-size invariance dynamic-case regression
+8. Added scripts/run_exceptional_cases.py as a manual confidence runner.
+
+What was verified here
+- pytest --collect-only now works cleanly and collects only tests from tests/.
+- python scripts/test_collision_scenario.py now starts correctly and fails gracefully only because no live backend was running.
+- Verified passing in this container:
+  pytest tests/test_snapshot_contract.py \
+         tests/test_collision_scenario_regression.py \
+         tests/test_exceptional_cases_matrix.py::test_scheduler_accepts_future_contact_before_deadline \
+         tests/test_exceptional_cases_matrix.py::test_scheduler_rejects_contact_after_deadline \
+         tests/test_exceptional_cases_matrix.py::test_scheduler_rejects_cooldown_conflict -q
+
+Recommended local commands
+- pytest -q
+- python scripts/run_exceptional_cases.py
+- python scripts/test_collision_scenario.py   # with backend running

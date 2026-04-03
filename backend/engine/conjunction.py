@@ -132,6 +132,11 @@ class ConjunctionDetector:
         sat_r, sat_v = self.sm.get_state(sat_id)
         deb_r, deb_v = self.sm.get_state(deb_id)
 
+        current_rel = np.array(deb_r) - np.array(sat_r)
+        current_vrel = np.array(deb_v) - np.array(sat_v)
+        current_dist = float(np.linalg.norm(current_rel))
+        range_rate = float(np.dot(current_rel, current_vrel) / (current_dist + 1e-18))
+
         # Compute linear TCA as bracket center if no hint given
         if linear_tca_hint is None:
             r_rel = np.array(deb_r) - np.array(sat_r)
@@ -250,6 +255,13 @@ class ConjunctionDetector:
         elif min_dist < WARNING_THRESHOLD_RED:    risk = "RED"
         elif min_dist < WARNING_THRESHOLD_YELLOW: risk = "YELLOW"
         else:                                     risk = "GREEN"
+
+        # Suppress stale post-TCA warnings. If the closest point inside the horizon
+        # is the current instant, the objects are already separating, and the current
+        # distance is safely above collision threshold, this is a past encounter and
+        # should not remain in active CDM lists.
+        if min_t <= 1e-9 and range_rate >= 0.0 and current_dist > COLLISION_THRESHOLD:
+            return 0.0, current_dist, "GREEN"
 
         return float(min_t), float(min_dist), risk
 

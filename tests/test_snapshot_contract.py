@@ -1,21 +1,37 @@
-"""
-Test: snapshot endpoint returns the enriched contract fields.
-Requires backend running on localhost:8000.
-"""
-import pytest
-import requests
+"""Test: snapshot endpoint returns the enriched contract fields.
 
-BASE = "http://localhost:8000"
+Runs fully in-process so the suite does not depend on a separately running backend.
+A dynamically collisional debris case is injected so CDM-only fields are always present.
+"""
+from __future__ import annotations
+
+import importlib
+
+import pytest
+from fastapi.testclient import TestClient
+
+from scripts.collision_case_builder import build_dynamic_collision_case
 
 
 @pytest.fixture(scope="module")
 def snapshot():
-    try:
-        r = requests.get(f"{BASE}/api/visualization/snapshot", timeout=10)
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        pytest.skip(f"Backend not running: {e}")
+    import backend.main as backend_main
+
+    backend_main = importlib.reload(backend_main)
+    backend_main.reset_world(load_defaults=True)
+    client = TestClient(backend_main.app)
+
+    base = client.get("/api/visualization/snapshot").json()
+    sats = base.get("satellites", [])
+    assert sats, "Expected at least one satellite in default world"
+
+    case = build_dynamic_collision_case(sats[0], deb_id="DEB-SNAPSHOT-CONTRACT-001")
+    resp = client.post(
+        "/api/telemetry",
+        json={"timestamp": base["timestamp"], "objects": [case.telemetry_object()]},
+    )
+    resp.raise_for_status()
+    return client.get("/api/visualization/snapshot").json()
 
 
 def test_snapshot_has_ground_stations(snapshot):
@@ -28,19 +44,19 @@ def test_snapshot_has_ground_stations(snapshot):
 
 def test_snapshot_satellite_has_tracks(snapshot):
     sats = snapshot.get("satellites", [])
-    if not sats:
-        pytest.skip("No satellites in snapshot")
+    assert sats
     sat = sats[0]
-    assert "past_track"   in sat, "Satellite missing past_track"
-    assert "future_track" in sat, "Satellite missing future_track"
+    assert "past_track" in sat
+    assert "future_track" in sat
+    assert isinstance(sat["past_track"], list)
+    assert isinstance(sat["future_track"], list)
 
 
 def test_snapshot_cdm_has_approach_angle(snapshot):
     cdms = snapshot.get("cdm_warnings", [])
-    if not cdms:
-        pytest.skip("No CDMs in snapshot")
+    assert cdms
     cdm = cdms[0]
-    assert "approach_angle_deg"  in cdm
+    assert "approach_angle_deg" in cdm
     assert "relative_speed_kms" in cdm
 
 
@@ -51,11 +67,10 @@ def test_snapshot_has_metrics_history(snapshot):
 
 def test_snapshot_debris_is_tuple_format(snapshot):
     cloud = snapshot.get("debris_cloud", [])
-    if not cloud:
-        pytest.skip("No debris in snapshot")
+    assert cloud
     item = cloud[0]
-    assert isinstance(item, list), "Debris items must be arrays (PS tuple format)"
-    assert len(item) == 4, "Debris tuple must be [id, lat, lon, alt]"
+    assert isinstance(item, list)
+    assert len(item) == 4
 
 
 def test_snapshot_has_exponential_uptime(snapshot):

@@ -1,4 +1,200 @@
-(venv) PS E:\nsh-2026-acm> python -m scripts.test_collision_scenario
+(venv) PS E:\nsh-2026-acm> pytest -q
+......................                                                                                                                                             [100%] 
+22 passed in 26.78s
+(venv) PS E:\nsh-2026-acm> python -m scripts.run_exceptional_cases   
+== Exceptional case matrix ==
+{"timestamp": "2026-04-03T09:37:47.564996+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:37:47.762275+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:37:47.949440+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:37:51.207754+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-005", "tca_seconds": 600.1, "miss_distance_km": 0.0033, "risk_level": "CRITICAL"}
+{"timestamp": "2026-04-03T09:37:51.210462+00:00", "level": "INFO", "event": "MANEUVER_SCHEDULED", "sat_id": "SATELLITE-GEN-001", "burn_id": "EVD_00001", "burn_type": "EVASION", "delta_v_ms": 1.0, "burn_time": "2026-03-12 08:00:15+00:00"}
+{"timestamp": "2026-04-03T09:37:51.212479+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 1, "sim_timestamp": "2026-03-12T08:00:00.000Z"}
+{"timestamp": "2026-04-03T09:37:51.522002+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.569420+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.617007+00:00", "level": "INFO", "event": "MANEUVER_EXECUTED", "sat_id": "SATELLITE-GEN-001", "burn_id": "EVD_00001", "burn_type": "EVASION", "delta_v_ms": 1.0, "fuel_consumed_kg": 0.1869, "fuel_remaining_kg": 49.8131}
+{"timestamp": "2026-04-03T09:37:51.629176+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-005", "tca_seconds": 584.4, "miss_distance_km": 0.5618, "risk_level": "RED"}
+{"timestamp": "2026-04-03T09:37:51.629176+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:15+00:00", "collisions": 0, "maneuvers_executed": 1, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.706194+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.760910+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.795933+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.821505+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.858015+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.913507+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.961404+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:51.990593+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:00:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.034899+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.070393+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.105424+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.143398+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.196942+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.242719+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.290676+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.349164+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.454358+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.529432+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.579123+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.621250+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.657396+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.679599+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.711135+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.745892+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.776297+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.828633+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.877349+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.933842+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:52.985704+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.056418+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.108810+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.141876+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.207609+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.308927+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.418303+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.461685+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.494904+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.522921+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.555114+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.583572+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.605917+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.630077+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.654096+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.684142+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.706154+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.732129+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.763169+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.792127+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.820087+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.852663+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.881429+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.908543+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.933450+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.959507+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:53.989346+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.013883+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.038858+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.069275+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.099701+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.135539+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-005", "tca_seconds": 284.5, "miss_distance_km": 0.5618, "risk_level": "RED"}
+{"timestamp": "2026-04-03T09:37:54.136842+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.164101+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.187956+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.206779+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.227099+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.255449+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.282922+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.306537+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.329886+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.352032+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.373471+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.399868+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.420754+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.457159+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.503619+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.568711+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.660307+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.786084+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:54.915203+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.023723+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.066350+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.101478+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.121805+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.152433+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.180347+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.206252+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.228967+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.250483+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.275179+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.296999+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.318752+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.337404+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.358171+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.375822+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.398411+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.416526+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.435253+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.455640+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.468162+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.489226+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.514913+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.532212+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.550239+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.571161+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.587755+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.608617+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.626780+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.647654+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.664459+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.679304+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.701826+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.719245+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.737216+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.753546+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.773013+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.792210+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.809865+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.826950+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.843542+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.865558+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.909157+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-005", "tca_seconds": 0.0, "miss_distance_km": 0.7308, "risk_level": "RED"}
+{"timestamp": "2026-04-03T09:37:55.910041+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.929783+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.948696+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.970355+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:55.987083+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.007694+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.025689+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.047169+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.070526+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.101551+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.123161+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.162179+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.195059+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:15+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.217978+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:20+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.249374+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:25+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.282749+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.307751+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:35+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.345810+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:40+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.423076+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:45+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.472918+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:50+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.518664+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:55+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.559360+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:12:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.603951+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:12:05+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:37:56.634149+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:12:10+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+dynamic_case step=5s -> collisions=0, maneuvers=1
+{"timestamp": "2026-04-03T09:37:56.887571+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:37:57.102013+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:38:00.224275+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-060", "tca_seconds": 600.1, "miss_distance_km": 0.0033, "risk_level": "CRITICAL"}
+{"timestamp": "2026-04-03T09:38:00.227283+00:00", "level": "INFO", "event": "MANEUVER_SCHEDULED", "sat_id": "SATELLITE-GEN-001", "burn_id": "EVD_00001", "burn_type": "EVASION", "delta_v_ms": 1.0, "burn_time": "2026-03-12 08:00:15+00:00"}
+{"timestamp": "2026-04-03T09:38:00.227283+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 1, "sim_timestamp": "2026-03-12T08:00:00.000Z"}
+{"timestamp": "2026-04-03T09:38:00.265462+00:00", "level": "INFO", "event": "MANEUVER_EXECUTED", "sat_id": "SATELLITE-GEN-001", "burn_id": "EVD_00001", "burn_type": "EVASION", "delta_v_ms": 1.0, "fuel_consumed_kg": 0.1869, "fuel_remaining_kg": 49.8131}
+{"timestamp": "2026-04-03T09:38:00.272979+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-060", "tca_seconds": 539.5, "miss_distance_km": 0.5618, "risk_level": "RED"}
+{"timestamp": "2026-04-03T09:38:00.274004+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:01:00+00:00", "collisions": 0, "maneuvers_executed": 1, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.298283+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:02:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.319809+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:03:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.340387+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:04:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.361387+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:05:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.397050+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-060", "tca_seconds": 239.5, "miss_distance_km": 0.5618, "risk_level": "RED"}
+{"timestamp": "2026-04-03T09:38:00.398057+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:06:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.422673+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:07:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.444342+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:08:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.461051+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:09:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.490799+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:10:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.536807+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SATELLITE-GEN-001", "deb_id": "DEB-RUNNER-060", "tca_seconds": 0.0, "miss_distance_km": 1.9072, "risk_level": "YELLOW"}
+{"timestamp": "2026-04-03T09:38:00.538837+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:11:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.559727+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:12:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.581730+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:13:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+{"timestamp": "2026-04-03T09:38:00.600722+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-12T08:14:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 2}
+dynamic_case step=60s -> collisions=0, maneuvers=1
+{"timestamp": "2026-04-03T09:38:00.829853+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:38:01.122153+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+future_contact_before_deadline -> ok=True, msg=SCHEDULED
+{"timestamp": "2026-04-03T09:38:01.361596+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:38:01.553819+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+future_contact_after_deadline -> ok=False, msg=Next ground station contact occurs after upload deadline
+{"timestamp": "2026-04-03T09:38:01.790737+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+{"timestamp": "2026-04-03T09:38:02.018484+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
+cooldown_first -> ok=True, msg=SCHEDULED
+cooldown_second -> ok=False, msg=Cooldown conflict with RUN-CD-1: 599s gap
+(venv) PS E:\nsh-2026-acm> python scripts/test_collision_scenario.py
 ========================================================================
  PROJECT AETHER — Dynamically Collisional Scenario Test
 ========================================================================
@@ -35,357 +231,3 @@ Final status:
   Final satellite status: NOMINAL
 
 ✅ PASS: dynamic collision case detected, avoided, and logged correctly
-(venv) PS E:\nsh-2026-acm> pytest -q tests/test_collision_scenario_regression.py
-.                                                                                                                                                                        [100%]
-1 passed in 21.46s
-(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py --mode fixture --in-process
-{"timestamp": "2026-04-03T00:36:06.827046+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 10094, "cdm_warnings": 0, "sim_timestamp": "2026-03-12T08:00:00+00:00"}
-{"timestamp": "2026-04-03T00:36:08.312310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.313310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.313310+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.315672+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 25, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
-{"timestamp": "2026-04-03T00:36:08.858875+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.859876+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.860890+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:08.861890+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 25, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
-{"timestamp": "2026-04-03T00:36:10.158250+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 600.1, "miss_distance_km": 0.0027, "risk_level": "CRITICAL"}
-{"timestamp": "2026-04-03T00:36:10.243609+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1399.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:10.245689+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1432.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:10.247703+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1403.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:10.248681+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 4, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
-{"timestamp": "2026-04-03T00:36:10.534347+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:00:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.628210+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:01:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.744082+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:01:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.824429+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:02:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.894427+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:02:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.923983+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:03:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.950063+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:03:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.970062+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:04:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:10.990597+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:04:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.106234+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 300.0, "miss_distance_km": 0.0003, "risk_level": "CRITICAL"}
-{"timestamp": "2026-04-03T00:36:11.161894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 1099.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.162894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 1132.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.162894+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 1103.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.163908+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:05:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.177914+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:05:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.200008+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:06:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.219084+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:06:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.237081+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:07:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.256076+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:07:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.277081+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:08:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.306103+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:08:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.331233+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:09:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.355164+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:09:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.371720+00:00", "level": "ERROR", "event": "COLLISION", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "distance_km": 0.0981}
-{"timestamp": "2026-04-03T00:36:11.492234+00:00", "level": "WARNING", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-001", "deb_id": "DEB-VAL-COLL-001", "tca_seconds": 0.0, "miss_distance_km": 0.0003, "risk_level": "CRITICAL"}
-{"timestamp": "2026-04-03T00:36:11.543961+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 798.3, "miss_distance_km": 4.504, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.544958+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 832.5, "miss_distance_km": 4.5724, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.546978+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 803.6, "miss_distance_km": 4.6635, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.547967+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:10:00+00:00", "collisions": 1, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.573962+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:10:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.601073+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:11:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.630148+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:11:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.652152+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:12:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.677987+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:12:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.704114+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:13:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 26}
-{"timestamp": "2026-04-03T00:36:11.915006+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 618.7, "miss_distance_km": 4.5038, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.916001+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 652.2, "miss_distance_km": 4.5723, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.916001+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 623.5, "miss_distance_km": 4.6633, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:11.917007+00:00", "level": "INFO", "event": "TELEMETRY_INGESTED", "object_count": 1, "cdm_warnings": 3, "sim_timestamp": "2026-03-28T12:00:00.000Z"}
-{"timestamp": "2026-04-03T00:36:12.056607+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:13:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.080606+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:14:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.110646+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:14:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.149797+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:15:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.181375+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:15:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.213187+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:16:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.248319+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:16:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.290320+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:17:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.379234+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:17:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.455405+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 318.4, "miss_distance_km": 4.5039, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.456406+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 352.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.457403+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 323.5, "miss_distance_km": 4.6634, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.458413+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:18:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.488301+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:18:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.525968+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:19:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.557361+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:19:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.587703+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:20:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.611718+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:20:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.655417+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:21:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.688966+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:21:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.717977+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:22:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.743065+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:22:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.844291+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-005", "deb_id": "DEB-FIX-005-03", "tca_seconds": 19.0, "miss_distance_km": 4.5042, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.846285+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-003", "deb_id": "DEB-FIX-003-03", "tca_seconds": 52.0, "miss_distance_km": 4.5725, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.846285+00:00", "level": "INFO", "event": "CDM_DETECTED", "sat_id": "SAT-FIX-004", "deb_id": "DEB-FIX-004-03", "tca_seconds": 23.0, "miss_distance_km": 4.6632, "risk_level": "YELLOW"}
-{"timestamp": "2026-04-03T00:36:12.847698+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:23:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.871324+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:23:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.893320+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:24:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.917342+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:24:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.937884+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:25:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.958924+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:25:30+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{"timestamp": "2026-04-03T00:36:12.978336+00:00", "level": "INFO", "event": "SIM_STEP", "new_timestamp": "2026-03-28T12:26:00+00:00", "collisions": 0, "maneuvers_executed": 0, "total_objects": 27}
-{
-  "summary": {
-    "mode": "fixture",
-    "epoch": "2026-03-28T12:00:00.000Z",
-    "satellites_loaded": 5,
-    "debris_loaded": 20,
-    "snapshot_satellites": 5,
-    "snapshot_debris": 20,
-    "backend_cdm_count": 3,
-    "oracle_pairs_scanned": 0,
-    "oracle_positive_count": 0,
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "seeded_cases_run": 2,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 0,
-    "seeded_total_maneuvers": 0,
-    "seeded_total_collisions": 1,
-    "wall_clock_seconds": 10.10473918914795
-  },
-  "oracle": {
-    "telemetry_response": {
-      "status": "ACK",
-      "processed_count": 25,
-      "active_cdm_warnings": 3
-    },
-    "snapshot_satellites": 5,
-    "snapshot_debris": 20,
-    "backend_cdm_count": 3,
-    "oracle_pairs_scanned": 0,
-    "oracle_positive_count": 0,
-    "oracle_positive_pairs": [],
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "median_tca_error_s": null,
-    "median_miss_error_km": null
-  },
-  "seeded": {
-    "cases": [
-      {
-        "sat_id": "SAT-FIX-001",
-        "deb_id": "DEB-VAL-COLL-001",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 3.970910528681311e-12,
-        "initial_relative_speed_kms": 0.029711587199091172,
-        "initial_cdm_seen": true,
-        "contact_feasible_under_ps": false,
-        "feasibility": {
-          "has_los_now": false,
-          "upload_station_id": null,
-          "contact_wait_seconds": null,
-          "contact_duration_seconds": null
-        },
-        "maneuvers_executed": 0,
-        "collisions_detected": 1
-      },
-      {
-        "sat_id": "SAT-FIX-002",
-        "deb_id": "DEB-VAL-COLL-002",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 8.922787342429993e-12,
-        "initial_relative_speed_kms": 0.02984215178569893,
-        "initial_cdm_seen": false,
-        "contact_feasible_under_ps": false,
-        "feasibility": {
-          "has_los_now": false,
-          "upload_station_id": "GS-005",
-          "contact_wait_seconds": 1260,
-          "contact_duration_seconds": 510
-        },
-        "maneuvers_executed": 0,
-        "collisions_detected": 0
-      }
-    ],
-    "seeded_cases_run": 2,
-    "seeded_cases_feasible": 0,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 0,
-    "seeded_total_maneuvers": 0,
-    "seeded_total_collisions": 1
-  }
-}
-(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py `  
->>   --mode local-files `
->>   --sat-file "E:\nsh-2026-acm\starlink.tle" `
->>   --debris-file "E:\nsh-2026-acm\debris.tle" `
->>   --api-base http://localhost:8000 `
->>   --report-json real_data_report.json
-{
-  "summary": {
-    "mode": "local-files",
-    "epoch": "2026-03-28T12:00:00.000Z",
-    "satellites_loaded": 20,
-    "debris_loaded": 500,
-    "snapshot_satellites": 20,
-    "snapshot_debris": 500,
-    "backend_cdm_count": 0,
-    "oracle_pairs_scanned": 40,
-    "oracle_positive_count": 0,
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "seeded_cases_run": 2,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 0,
-    "seeded_total_maneuvers": 0,
-    "seeded_total_collisions": 5,
-    "wall_clock_seconds": 137.14632201194763
-  },
-  "oracle": {
-    "telemetry_response": {
-      "status": "ACK",
-      "processed_count": 520,
-      "active_cdm_warnings": 0
-    },
-    "snapshot_satellites": 20,
-    "snapshot_debris": 500,
-    "backend_cdm_count": 0,
-    "oracle_pairs_scanned": 40,
-    "oracle_positive_count": 0,
-    "oracle_positive_pairs": [],
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "median_tca_error_s": null,
-    "median_miss_error_km": null,
-    "backend_pairs": []
-  },
-  "seeded": {
-    "cases": [
-      {
-        "sat_id": "SAT-REAL-001",
-        "deb_id": "DEB-VAL-COLL-001",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 1.0725194820289065e-12,
-        "initial_relative_speed_kms": 0.02974243554406868,
-        "initial_cdm_seen": true,
-        "contact_feasible_under_ps": false,
-        "feasibility": {
-          "has_los_now": false,
-          "upload_station_id": "GS-004",
-          "contact_wait_seconds": 3540,
-          "contact_duration_seconds": 150
-        },
-        "maneuvers_executed": 0,
-        "collisions_detected": 5
-      },
-      {
-        "sat_id": "SAT-REAL-002",
-        "deb_id": "DEB-VAL-COLL-002",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 1.0725194820289065e-12,
-        "initial_relative_speed_kms": 0.02974243554406868,
-        "initial_cdm_seen": false,
-        "contact_feasible_under_ps": false,
-        "feasibility": {
-          "has_los_now": false,
-          "upload_station_id": "GS-004",
-          "contact_wait_seconds": 3540,
-          "contact_duration_seconds": 150
-        },
-        "maneuvers_executed": 0,
-        "collisions_detected": 0
-      }
-    ],
-    "seeded_cases_run": 2,
-    "seeded_cases_feasible": 0,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 0,
-    "seeded_total_maneuvers": 0,
-    "seeded_total_collisions": 5
-  }
-}
-
-Wrote report to real_data_report.json
-(venv) PS E:\nsh-2026-acm> python scripts/test_with_real_data.py `  
->>   --mode live `
->>   --sat-limit 25 `
->>   --debris-limit 500 `      
->>   --oracle-sats 5 `
->>   --oracle-debris 120 `
->>   --oracle-pairs-per-sat 8 `
->>   --report-json live_data_report.json
-{
-  "summary": {
-    "mode": "live",
-    "epoch": "2026-03-28T12:00:00.000Z",
-    "satellites_loaded": 25,
-    "debris_loaded": 500,
-    "snapshot_satellites": 25,
-    "snapshot_debris": 500,
-    "backend_cdm_count": 0,
-    "oracle_pairs_scanned": 40,
-    "oracle_positive_count": 0,
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "seeded_cases_run": 2,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 1,
-    "seeded_total_maneuvers": 2,
-    "seeded_total_collisions": 0,
-    "wall_clock_seconds": 145.33253526687622
-  },
-  "oracle": {
-    "telemetry_response": {
-      "status": "ACK",
-      "processed_count": 525,
-      "active_cdm_warnings": 0
-    },
-    "snapshot_satellites": 25,
-    "snapshot_debris": 500,
-    "backend_cdm_count": 0,
-    "oracle_pairs_scanned": 40,
-    "oracle_positive_count": 0,
-    "oracle_positive_pairs": [],
-    "oracle_recall": null,
-    "matched_oracle_pairs": 0,
-    "median_tca_error_s": null,
-    "median_miss_error_km": null,
-    "backend_pairs": []
-  },
-  "seeded": {
-    "cases": [
-      {
-        "sat_id": "SAT-REAL-001",
-        "deb_id": "DEB-VAL-COLL-001",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 7.554830392944564e-12,
-        "initial_relative_speed_kms": 0.0297830569349142,
-        "initial_cdm_seen": true,
-        "contact_feasible_under_ps": true,
-        "feasibility": {
-          "has_los_now": true,
-          "upload_station_id": "GS-001",
-          "contact_wait_seconds": 0.0
-        },
-        "maneuvers_executed": 1,
-        "collisions_detected": 0
-      },
-      {
-        "sat_id": "SAT-REAL-002",
-        "deb_id": "DEB-VAL-COLL-002",
-        "target_tca_seconds": 600.0,
-        "initial_miss_km": 1.0664770706679132e-11,
-        "initial_relative_speed_kms": 0.02978736800041055,
-        "initial_cdm_seen": false,
-        "contact_feasible_under_ps": false,
-        "feasibility": {
-          "has_los_now": false,
-          "upload_station_id": "GS-003",
-          "contact_wait_seconds": 1020,
-          "contact_duration_seconds": 360
-        },
-        "maneuvers_executed": 1,
-        "collisions_detected": 0
-      }
-    ],
-    "seeded_cases_run": 2,
-    "seeded_cases_feasible": 1,
-    "seeded_cases_with_initial_cdm": 1,
-    "seeded_cases_avoided": 1,
-    "seeded_total_maneuvers": 2,
-    "seeded_total_collisions": 0
-  }
-}
-
-Wrote report to live_data_report.json

@@ -205,40 +205,66 @@ def build_fixture_telemetry(
 ) -> Tuple[Dict[str, Any], Dict[str, TLETriple]]:
     """Offline smoke dataset.
 
-    Satellites come from bundled public TLEs. Debris are deterministic perturbations
-    of those real states. This mode is for offline smoke tests only. It is not the
-    real-data oracle mode.
+    Preferred path: propagate bundled public TLEs with SGP4.
+    Fallback path when SGP4 is unavailable: use deterministic states from the
+    repository's default satellite JSON so the fixture suite still runs offline.
     """
     objects: List[Dict[str, Any]] = []
     tle_map: Dict[str, TLETriple] = {}
 
     sat_triples = list(sat_tles)[:sat_limit]
-    for idx, triple in enumerate(sat_triples, start=1):
-        r, v = state_from_tle(triple, epoch_dt)
-        if not _valid_radius(r):
-            continue
-        sat_id = f"SAT-FIX-{idx:03d}"
-        tle_map[sat_id] = triple
-        objects.append(telemetry_object(sat_id, "SATELLITE", r, v))
+    used_any_tle = False
+    if Satrec is not None and jday is not None:
+        for idx, triple in enumerate(sat_triples, start=1):
+            r, v = state_from_tle(triple, epoch_dt)
+            if not _valid_radius(r):
+                continue
+            used_any_tle = True
+            sat_id = f"SAT-FIX-{idx:03d}"
+            tle_map[sat_id] = triple
+            objects.append(telemetry_object(sat_id, "SATELLITE", r, v))
 
-        rhat = r / np.linalg.norm(r)
-        hhat = np.cross(r, v)
-        hhat = hhat / np.linalg.norm(hhat)
-        that = np.cross(hhat, rhat)
-        bases = [rhat, that, hhat, (rhat + that) / np.linalg.norm(rhat + that)]
+            rhat = r / np.linalg.norm(r)
+            hhat = np.cross(r, v)
+            hhat = hhat / np.linalg.norm(hhat)
+            that = np.cross(hhat, rhat)
+            bases = [rhat, that, hhat, (rhat + that) / np.linalg.norm(rhat + that)]
 
-        for j in range(debris_per_sat):
-            basis = bases[j % len(bases)]
-            offset_km = 80.0 + 35.0 * j
-            dv_kms = 0.01 + 0.002 * j
-            deb_r = r + basis * offset_km
-            deb_v = v - basis * dv_kms
-            deb_id = f"DEB-FIX-{idx:03d}-{j+1:02d}"
-            objects.append(telemetry_object(deb_id, "DEBRIS", deb_r, deb_v))
+            for j in range(debris_per_sat):
+                basis = bases[j % len(bases)]
+                offset_km = 80.0 + 35.0 * j
+                dv_kms = 0.01 + 0.002 * j
+                deb_r = r + basis * offset_km
+                deb_v = v - basis * dv_kms
+                deb_id = f"DEB-FIX-{idx:03d}-{j+1:02d}"
+                objects.append(telemetry_object(deb_id, "DEBRIS", deb_r, deb_v))
+
+    if not used_any_tle:
+        sat_json = REPO_ROOT / "backend" / "data" / "satellites_init.json"
+        default_sats = json.loads(sat_json.read_text(encoding="utf-8"))[:sat_limit]
+        for idx, obj in enumerate(default_sats, start=1):
+            r = np.array([obj["r"]["x"], obj["r"]["y"], obj["r"]["z"]], dtype=float)
+            v = np.array([obj["v"]["x"], obj["v"]["y"], obj["v"]["z"]], dtype=float)
+            sat_id = f"SAT-FIX-{idx:03d}"
+            objects.append(telemetry_object(sat_id, "SATELLITE", r, v))
+
+            rhat = r / np.linalg.norm(r)
+            hhat = np.cross(r, v)
+            hhat = hhat / np.linalg.norm(hhat)
+            that = np.cross(hhat, rhat)
+            bases = [rhat, that, hhat, (rhat + that) / np.linalg.norm(rhat + that)]
+
+            for j in range(debris_per_sat):
+                basis = bases[j % len(bases)]
+                offset_km = 80.0 + 35.0 * j
+                dv_kms = 0.01 + 0.002 * j
+                deb_r = r + basis * offset_km
+                deb_v = v - basis * dv_kms
+                deb_id = f"DEB-FIX-{idx:03d}-{j+1:02d}"
+                objects.append(telemetry_object(deb_id, "DEBRIS", deb_r, deb_v))
 
     payload = {"timestamp": to_iso_z(epoch_dt), "objects": objects}
     return payload, tle_map
-
 
 def build_live_telemetry(
     sat_tles: Sequence[TLETriple],
@@ -505,7 +531,7 @@ def run_seeded_collision_campaign(
     step_seconds: int = 30,
     max_steps: int = 80,
 ) -> Dict[str, Any]:
-    from collision_case_builder import build_dynamic_collision_case
+    from scripts.collision_case_builder import build_dynamic_collision_case
 
     snapshot = client.get_json("/api/visualization/snapshot")
     satellites = snapshot.get("satellites", [])
@@ -522,7 +548,21 @@ def run_seeded_collision_campaign(
     cases_avoided = 0
     cases_feasible = 0
 
-    for idx, sat in enumerate(satellites[:cases_to_run], start=1):
+    ranked_sats = []
+    for sat in satellites:
+        try:
+            probe_case = build_dynamic_collision_case(sat, deb_id="DEB-VAL-PROBE")
+        except Exception:
+            continue
+        feasible, feasibility_meta = _is_seeded_case_contact_feasible(gn, sat, now_dt, probe_case.tca_seconds)
+        ranked_sats.append((0 if feasibility_meta.get("has_los_now") else 1, 0 if feasible else 1, probe_case.tca_seconds, sat, feasibility_meta))
+
+    if not ranked_sats:
+        raise RuntimeError("Could not build any seeded collision cases from current snapshot")
+
+    ranked_sats.sort(key=lambda item: (item[0], item[1], item[2]))
+
+    for idx, (_, _, _, sat, pre_meta) in enumerate(ranked_sats[:cases_to_run], start=1):
         case = build_dynamic_collision_case(sat, deb_id=f"DEB-VAL-COLL-{idx:03d}")
         feasible, feasibility_meta = _is_seeded_case_contact_feasible(gn, sat, now_dt, case.tca_seconds)
         if feasible:
@@ -602,7 +642,8 @@ def run_validation_suite(
     seeded_cases: int = 2,
     seeded_step_seconds: int = 30,
 ) -> Dict[str, Any]:
-    require_sgp4()
+    if mode != "fixture":
+        require_sgp4()
     started = time.time()
     epoch_dt = parse_iso_z(epoch_str)
     client = InProcessAPIClient() if in_process else LiveAPIClient(api_base)

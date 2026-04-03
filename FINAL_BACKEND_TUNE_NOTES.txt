@@ -1,0 +1,14 @@
+This small final backend tune addresses the last subtle issue still visible in the logs:
+
+1. Suppresses stale post-TCA CDMs for receding pairs.
+   Before this patch, a pair that had already safely passed could still appear as YELLOW/RED
+   with tca_seconds = 0.0 if the current separation stayed below the warning threshold.
+   The conjunction detector now marks such receding post-TCA pairs as GREEN and excludes them
+   from active CDM warnings.
+
+2. Extends step-size invariance validation to a very coarse 300 s step.
+   This is important because the problem statement allows arbitrary fast-forward steps.
+
+3. Adds an explicit regression test that verifies no residual CDM survives after a safe pass.
+
+4. Adds a tiny backend stress smoke script for quick confidence checks before demo/submission.
