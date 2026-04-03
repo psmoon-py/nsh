@@ -15,9 +15,10 @@ import os
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 
 from backend.models import (
     TelemetryInput, TelemetryResponse,
@@ -528,9 +529,34 @@ async def admin_reset_world(data: dict | None = None):
 
 
 # ══════════════════════════════════════════════════════════
-# Static frontend
+# Static frontend / SPA fallback
 # ══════════════════════════════════════════════════════════
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-if os.path.exists(FRONTEND_DIR):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+
+if FRONTEND_DIST.exists():
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        return FileResponse(FRONTEND_DIST / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        blocked_prefixes = ("api/", "docs", "redoc", "openapi.json", ".well-known/")
+        if (
+            full_path == "docs"
+            or full_path == "redoc"
+            or full_path == "openapi.json"
+            or any(full_path.startswith(prefix) for prefix in blocked_prefixes)
+        ):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+        target = FRONTEND_DIST / full_path
+        if target.exists() and target.is_file():
+            return FileResponse(target)
+
+        return FileResponse(FRONTEND_DIST / "index.html")
